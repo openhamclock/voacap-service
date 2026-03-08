@@ -19,6 +19,8 @@
 
 FROM debian:bookworm-slim AS builder
 
+WORKDIR /build/voacapl
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     gfortran \
@@ -28,20 +30,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-RUN git clone --depth=1 https://github.com/jawatson/voacapl.git /build/voacapl
-
-WORKDIR /build/voacapl
-
 # Full build sequence per upstream README:
 #   automake/autoreconf regenerates Makefiles from the .am/.ac sources
 #   configure + make + make install compiles and stages the binary
 #   makeitshfbc populates the itshfbc data directory (ionospheric coefficients,
 #   antenna patterns, etc.) — without this voacapl has no data and fails at runtime
-RUN automake --add-missing && autoreconf
-RUN ./configure
-RUN make
-RUN make install DESTDIR=/build/install
-RUN makeitshfbc
+RUN git clone --depth=1 https://github.com/jawatson/voacapl.git /build/voacapl && \
+    autoreconf && \
+    automake --add-missing && \
+    ./configure && \
+    make && \
+    make install DESTDIR=/build/install
 
 # ---------------------------------------------------------------------------
 FROM debian:bookworm-slim
@@ -51,6 +50,9 @@ LABEL org.opencontainers.image.description="VOACAP HF propagation service for Ha
 LABEL org.opencontainers.image.licenses="AGPL-3.0"
 LABEL org.opencontainers.image.source="https://github.com/your-org/open-hamclock-backend"
 
+COPY --from=builder /build/install/usr/local/bin/ /usr/local/bin/
+COPY --from=builder /build/install/usr/local/share/ /usr/local/share/
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libgfortran5 \
     nginx \
@@ -58,12 +60,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     uwsgi-plugin-python3 \
     python3 \
     ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
-
-COPY --from=builder /build/install/usr/local/bin/voacapl /usr/local/bin/voacapl
-COPY --from=builder /build/install/usr/local/share/voacapl /usr/local/share/voacapl
-
-RUN chmod 755 /usr/local/bin/voacapl
+    && rm -rf /var/lib/apt/lists/* && \
+    # \
+    chmod 755 /usr/local/bin/voacapl && \
+    chmod +x /usr/local/bin/* && \
+    makeitshfbc
 
 # Patch version file to use IONCAP absorption model at build time.
 # entrypoint.sh re-applies this in case the data dir is mounted externally.
