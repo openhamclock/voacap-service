@@ -1,0 +1,98 @@
+# voacap-service Dockerfile
+#
+# Copyright (C) 2026 Open HamClock Backend (OHB) Contributors
+# License: GNU Affero General Public License v3.0 (AGPLv3)
+# See LICENSE or <https://www.gnu.org/licenses/agpl-3.0.html>
+#
+# Builds a self-contained VOACAP HTTP service compatible with HamClock's
+# fetchBandConditions wire protocol. Serves multiple concurrent clients via
+# nginx + uWSGI + Python, with per-request isolated VOACAP run directories.
+#
+# Build:
+#   docker build -t voacap-service .
+#
+# Run:
+#   docker run -p 8080:8080 voacap-service
+#
+# Test:
+#   curl "http://localhost:8080/fetchBandConditions?YEAR=2026&MONTH=1&RXLAT=0&RXLNG=0&TXLAT=28&TXLNG=-81&PATH=0&POW=100&MODE=19&TOA=3.0"
+
+FROM debian:bookworm-slim AS builder
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    gfortran \
+    automake \
+    autoconf \
+    git \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN git clone --depth=1 https://github.com/jawatson/voacapl.git /build/voacapl
+
+WORKDIR /build/voacapl
+
+# Full build sequence per upstream README:
+#   automake/autoreconf regenerates Makefiles from the .am/.ac sources
+#   configure + make + make install compiles and stages the binary
+#   makeitshfbc populates the itshfbc data directory (ionospheric coefficients,
+#   antenna patterns, etc.) — without this voacapl has no data and fails at runtime
+RUN automake --add-missing && autoreconf
+RUN ./configure
+RUN make
+RUN make install DESTDIR=/build/install
+RUN makeitshfbc
+
+# ---------------------------------------------------------------------------
+FROM debian:bookworm-slim
+
+LABEL org.opencontainers.image.title="voacap-service"
+LABEL org.opencontainers.image.description="VOACAP HF propagation service for HamClock (OHB)"
+LABEL org.opencontainers.image.licenses="AGPL-3.0"
+LABEL org.opencontainers.image.source="https://github.com/your-org/open-hamclock-backend"
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libgfortran5 \
+    nginx \
+    uwsgi \
+    uwsgi-plugin-python3 \
+    python3 \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /build/install/usr/local/bin/voacapl /usr/local/bin/voacapl
+COPY --from=builder /build/install/usr/local/share/voacapl /usr/local/share/voacapl
+
+RUN chmod 755 /usr/local/bin/voacapl
+
+# Patch version file to use IONCAP absorption model at build time.
+# entrypoint.sh re-applies this in case the data dir is mounted externally.
+RUN VERSION_FILE=/usr/local/share/voacapl/itshfbc/database/version.w32 && \
+    if [ -f "$VERSION_FILE" ]; then \
+        sed -i 's/Version \([0-9.]*\)W/Version \1I/' "$VERSION_FILE"; \
+        echo "Patched: $(cat $VERSION_FILE)"; \
+    fi
+
+COPY app/voacap_service.py /app/voacap_service.py
+COPY app/uwsgi.ini         /app/uwsgi.ini
+COPY app/nginx.conf        /app/nginx.conf
+COPY app/entrypoint.sh     /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
+
+RUN rm -f /etc/nginx/sites-enabled/default /etc/nginx/conf.d/default.conf
+
+ENV VOACAP_BIN=/usr/local/bin/voacapl
+ENV VOACAP_AREA=/usr/local/share/voacapl/itshfbc
+ENV VOACAP_SSN_FILE="/opt/hamclock-backend/htdocs/ham/HamClock/ssn/ssn-31.txt"
+ENV VOACAP_SSN_MODE=latest
+ENV LOG_LEVEL=INFO
+
+# Use RAM-backed tmpfs for VOACAP temp files — fastest possible I/O
+ENV TMPDIR=/dev/shm
+
+EXPOSE 8080
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD wget -q -O- http://localhost:8080/health || exit 1
+
+ENTRYPOINT ["/app/entrypoint.sh"]

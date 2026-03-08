@@ -1,0 +1,35 @@
+services:
+  voacap-service:
+    build: .
+    image: voacap-service:latest
+    container_name: voacap-service
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      LOG_LEVEL: INFO
+      # SSN_MODE: latest or average (default: latest)
+      # VOACAP_SSN_MODE: average
+    volumes:
+      # Mount the OHB SSN directory read-only so the container can read
+      # ssn-31.txt that is updated by your existing OHB cron jobs on the host.
+      # The path inside the container matches VOACAP_SSN_FILE default so no
+      # extra env var is needed.
+      - /opt/hamclock-backend/htdocs/ham/HamClock/ssn:/opt/hamclock-backend/htdocs/ham/HamClock/ssn:ro
+    shm_size: "64mb"    # /dev/shm for fast VOACAP temp files
+    mem_limit: "512m"
+    cpus: "2.0"
+    tmpfs:
+      - /run:size=8m
+      - /tmp:size=32m
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O-", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
