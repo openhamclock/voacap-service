@@ -65,35 +65,37 @@ BANDS_MHZ = [3.50, 7.00, 10.10, 14.00, 18.10, 21.00, 24.90, 28.00, 50.00]
 # values are reasonable starting points based on ITU/VOACAP conventions
 # but should be validated against reference data when available.
 #
+# some relative adjustments taken from here:
+# https://www.amateurradio.com/weak-signal-performance-of-common-modulation-formats/
+#
 # MODE  Label   RSN(dB)  Notes
-#   0   SSB     24.0     TODO: calibrate (ITU baseline ~10dB, placeholder 24)
-#   1   SSB     24.0     TODO: calibrate (duplicate SSB code)
-#  14   FT8      0.0     TODO: calibrate (FT8 works at -20dB SNR in audio BW;
-#                                VOACAP SNR is in 3kHz BW so ~+13dB offset needed)
-#  15   FT4      3.0     TODO: calibrate (FT4 ~6dB worse than FT8)
-#  17   RTTY    17.0     TODO: calibrate (RTTY typically ~10dB over CW)
+#  38   SSB     34.0
+#  13   FT8     10.0
+#   3   WSPR     0.0
+#  17   FT4     14.0
+#  22   RTTY    20.0
 #  19   CW      17.0     Calibrated against CSI reference output
-#  20   AM      30.0     TODO: calibrate (AM needs high SNR for usable audio)
+#  49   AM      43.0
 # ---------------------------------------------------------------------------
 MODE_RSN: dict[int, float] = {
-    0:  24.0,   # SSB      — TODO: calibrate
-    1:  24.0,   # SSB      — TODO: calibrate
-    14:  0.0,   # FT8      — TODO: calibrate
-    15:  3.0,   # FT4      — TODO: calibrate
-    17: 17.0,   # RTTY     — TODO: calibrate
+    3:   0.0,   # WSPR     — calibrated based on reference above
+    38: 34.0,   # SSB      — calibrated based on reference above
+    13: 10.0,   # FT8      — calibrated based on reference above
+    17: 14.0,   # FT4      — calibrated based on reference above
+    22: 20.0,   # RTTY     — calibrated based on reference above
     19: 17.0,   # CW       — calibrated
-    20: 30.0,   # AM       — TODO: calibrate
+    49: 43.0,   # AM       — calibrated based on reference above
 }
 MODE_RSN_DEFAULT = 17.0   # fallback for unknown mode codes
 
 MODE_LABEL: dict[int, str] = {
-    0:  "SSB",
-    1:  "SSB",
-    14: "FT8",
-    15: "FT4",
-    17: "RTTY",
+    3:  "WSPR",
+    38: "SSB",
+    13: "FT8",
+    17: "FT4",
+    22: "RTTY",
     19: "CW",
-    20: "AM",
+    49: "AM",
 }
 
 # ---------------------------------------------------------------------------
