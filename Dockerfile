@@ -17,18 +17,17 @@
 # Test:
 #   curl "http://localhost:8080/fetchBandConditions?YEAR=2026&MONTH=1&RXLAT=0&RXLNG=0&TXLAT=28&TXLNG=-81&PATH=0&POW=100&MODE=19&TOA=3.0"
 
-FROM debian:bookworm-slim AS builder
+FROM debian:13.3-slim AS builder
 
 WORKDIR /build/voacapl
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    gfortran \
-    automake \
-    autoconf \
-    git \
-    ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+# Install build prerequisites
+COPY package-list-support.txt /build/
+
+RUN apt-get update && \
+    apt install -y --no-install-recommends $(grep -v '^#' /build/package-list-support.txt) && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
 # Full build sequence per upstream README:
 #   automake/autoreconf regenerates Makefiles from the .am/.ac sources
@@ -43,7 +42,7 @@ RUN git clone --depth=1 https://github.com/jawatson/voacapl.git /build/voacapl &
     make install DESTDIR=/build/install
 
 # ---------------------------------------------------------------------------
-FROM debian:bookworm-slim
+FROM debian:13.3-slim
 
 LABEL org.opencontainers.image.title="voacap-service"
 LABEL org.opencontainers.image.description="VOACAP HF propagation service for HamClock (OHB)"
@@ -52,15 +51,16 @@ LABEL org.opencontainers.image.source="https://github.com/your-org/open-hamclock
 
 COPY --from=builder /build/install/usr/local/bin/ /usr/local/bin/
 COPY --from=builder /build/install/usr/local/share/ /usr/local/share/
+COPY package-list.txt /app/
+COPY app/voacap_service.py /app/voacap_service.py
+COPY app/uwsgi.ini         /app/uwsgi.ini
+COPY app/nginx.conf        /app/nginx.conf
+COPY app/entrypoint.sh     /app/entrypoint.sh
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libgfortran5 \
-    nginx \
-    uwsgi \
-    uwsgi-plugin-python3 \
-    python3 \
-    ca-certificates \
-    && rm -rf /var/lib/apt/lists/* && \
+RUN apt update && \
+    apt install -y --no-install-recommends $(grep -v '^#' /app/package-list.txt) && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/* && \
     # \
     chmod 755 /usr/local/bin/voacapl && \
     chmod +x /usr/local/bin/* && \
@@ -74,10 +74,6 @@ RUN VERSION_FILE=/usr/local/share/voacapl/itshfbc/database/version.w32 && \
         echo "Patched: $(cat $VERSION_FILE)"; \
     fi
 
-COPY app/voacap_service.py /app/voacap_service.py
-COPY app/uwsgi.ini         /app/uwsgi.ini
-COPY app/nginx.conf        /app/nginx.conf
-COPY app/entrypoint.sh     /app/entrypoint.sh
 RUN chmod +x /app/entrypoint.sh
 
 RUN rm -f /etc/nginx/sites-enabled/default /etc/nginx/conf.d/default.conf
@@ -94,6 +90,6 @@ ENV TMPDIR=/dev/shm
 EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD wget -q -O- http://localhost:8080/health || exit 1
+    CMD curl -s http://localhost:8080/health || exit 1
 
 ENTRYPOINT ["/app/entrypoint.sh"]
