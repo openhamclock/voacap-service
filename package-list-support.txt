@@ -2,6 +2,7 @@
 
 autoconf
 automake
+build-essential
 ca-certificates
 gfortran
 git
