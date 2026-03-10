@@ -1,0 +1,9 @@
+# empty lines and lines beginning with a # are ignored. Note that comments within lines are not ignored
+
+ca-certificates
+curl
+libgfortran5
+python3
+nginx
+uwsgi
+uwsgi-plugin-python3

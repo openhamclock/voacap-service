@@ -1,0 +1,7 @@
+# empty lines and lines beginning with a # are ignored. Note that comments within lines are not ignored
+
+autoconf
+automake
+ca-certificates
+gfortran
+git
