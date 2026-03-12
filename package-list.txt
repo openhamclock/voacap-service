@@ -1,9 +1,18 @@
 # empty lines and lines beginning with a # are ignored. Note that comments within lines are not ignored
 
+# temp for development
+vim
+
+# packages required by voacap-service
 ca-certificates
 curl
 libgfortran5
 python3
+python3-cartopy
+python3-numpy
+python3-scipy
+python3-pil
+python3-matplotlib
 nginx
 uwsgi
 uwsgi-plugin-python3

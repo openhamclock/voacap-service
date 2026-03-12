@@ -26,6 +26,9 @@ import tempfile
 import logging
 from urllib.parse import parse_qs
 
+# Area map module (VOAAREA METHOD 130 native mode)
+from area_map import handle_area_request
+
 # ---------------------------------------------------------------------------
 # Configuration (override via environment variables)
 # ---------------------------------------------------------------------------
@@ -349,11 +352,27 @@ def zero_output(pow_w: float, mode_label: str, toa: float, path: int, ssn: float
 
 
 # ---------------------------------------------------------------------------
-# WSGI application entry point
+# WSGI application entry point — routes requests to the correct handler
 # ---------------------------------------------------------------------------
 def application(environ, start_response):
-    qs = environ.get("QUERY_STRING", "")
+    path   = environ.get("PATH_INFO", "/")
+    qs     = environ.get("QUERY_STRING", "")
     params = {k: v[0] for k, v in parse_qs(qs, keep_blank_values=True).items()}
+
+    # VOAAREA single-frequency coverage map (CSI-compatible endpoint)
+    if path in ("/fetchVOACAPArea.pl",
+                "/ham/HamClock/fetchVOACAPArea.pl",
+                "/fetchVOACAP-TOA.pl",
+                "/ham/HamClock/fetchVOACAP-TOA.pl",
+                "/fetchVOACAP-MUF.pl",
+                "/ham/HamClock/fetchVOACAP-MUF.pl"):
+        return handle_area_request(params, start_response, environ)
+
+    # Fall through to band conditions handler
+    return _handle_band_conditions(params, start_response)
+
+
+def _handle_band_conditions(params, start_response):
 
     def p_int(k):
         v = params.get(k)
@@ -444,3 +463,5 @@ def application(environ, start_response):
         ("X-Generator", "OHB-voacap-service"),
     ])
     return [body.encode("ISO-8859-1")]
+
+# ---------------------------------------------------------------------------

@@ -52,10 +52,6 @@ LABEL org.opencontainers.image.source="https://github.com/your-org/open-hamclock
 COPY --from=builder /build/install/usr/local/bin/ /usr/local/bin/
 COPY --from=builder /build/install/usr/local/share/ /usr/local/share/
 COPY package-list.txt /app/
-COPY app/voacap_service.py /app/voacap_service.py
-COPY app/uwsgi.ini         /app/uwsgi.ini
-COPY app/nginx.conf        /app/nginx.conf
-COPY app/entrypoint.sh     /app/entrypoint.sh
 
 RUN apt update && \
     apt install -y --no-install-recommends $(grep -v '^#' /app/package-list.txt) && \
@@ -65,6 +61,12 @@ RUN apt update && \
     chmod 755 /usr/local/bin/voacapl && \
     chmod +x /usr/local/bin/* && \
     makeitshfbc
+
+COPY app/voacap_service.py /app/voacap_service.py
+COPY app/area_map.py       /app/area_map.py
+COPY app/uwsgi.ini         /app/uwsgi.ini
+COPY app/nginx.conf        /app/nginx.conf
+COPY app/entrypoint.sh     /app/entrypoint.sh
 
 # Patch version file to use IONCAP absorption model at build time.
 # entrypoint.sh re-applies this in case the data dir is mounted externally.
