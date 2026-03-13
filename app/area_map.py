@@ -190,8 +190,8 @@ def build_area_deck(year, month, utc, txlat, txlng,
     return (
         comment1 + "\n"
         "COMMENT       0    4   -1   -1    1    0 receive.cty\n"
-        "COMMENT {txlat:.3f} {txlng:8.3f} OHB 0.0 {path_word}\n"
-        "AREA {txlat:.3f} {txlng:8.3f} -20000.00 20000.00 -20000.00 20000.00 37 37 0\n"
+        "COMMENT     {txlat:07.3f}  {txlng:08.3f} OHB                    0.0 {path_word}\n"
+        "AREA        {txlat:07.3f}  {txlng:08.3f}  -20000.00  20000.00 -20000.00  20000.00   37   37    0\n"
         "COMMENT   Parameters:    4\n"
         "COMMENT   MUF      0\n"
         "COMMENT   DBU      0\n"
