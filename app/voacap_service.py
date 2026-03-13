@@ -57,7 +57,7 @@ logging.basicConfig(
 log = logging.getLogger("voacap_service")
 
 # HamClock 9 bands (MHz) — 50 MHz included; VOACAP HF model returns 0 for it
-BANDS_MHZ = [3.50, 7.00, 10.10, 14.00, 18.10, 21.00, 24.90, 28.00, 50.00]
+BANDS_MHZ = [3.75, 5.36, 7.15, 10.13, 14.18, 18.12, 21.23, 24.94, 28.85]
 
 # ---------------------------------------------------------------------------
 # Mode → Required SNR mapping
@@ -81,13 +81,13 @@ BANDS_MHZ = [3.50, 7.00, 10.10, 14.00, 18.10, 21.00, 24.90, 28.00, 50.00]
 #  49   AM      43.0
 # ---------------------------------------------------------------------------
 MODE_RSN: dict[int, float] = {
-    3:   0.0,   # WSPR     — calibrated based on reference above
-    38: 34.0,   # SSB      — calibrated based on reference above
-    13: 10.0,   # FT8      — calibrated based on reference above
-    17: 14.0,   # FT4      — calibrated based on reference above
-    22: 20.0,   # RTTY     — calibrated based on reference above
-    19: 17.0,   # CW       — calibrated
-    49: 43.0,   # AM       — calibrated based on reference above
+    3:  -4.4,   # WSPR     — calibrated based on reference above
+    38: 29.6,   # SSB      — calibrated based on reference above
+    13:  5.6,   # FT8      — calibrated based on reference above
+    17:  9.6,   # FT4      — calibrated based on reference above
+    22: 15.6,   # RTTY     — calibrated based on reference above
+    19: 12.6,   # CW       — calibrated
+    49: 38.6,   # AM       — calibrated based on reference above
 }
 MODE_RSN_DEFAULT = 17.0   # fallback for unknown mode codes
 
