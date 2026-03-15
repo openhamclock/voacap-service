@@ -22,7 +22,7 @@ FROM debian:13.3-slim AS builder
 WORKDIR /build/voacapl
 
 # Install build prerequisites
-COPY package-list-support.txt /build/
+COPY docker/package-list-support.txt /build/
 
 RUN apt-get update && \
     apt install -y --no-install-recommends $(grep -v '^#' /build/package-list-support.txt) && \
@@ -51,7 +51,7 @@ LABEL org.opencontainers.image.source="https://github.com/your-org/open-hamclock
 
 COPY --from=builder /build/install/usr/local/bin/ /usr/local/bin/
 COPY --from=builder /build/install/usr/local/share/ /usr/local/share/
-COPY package-list.txt /app/
+COPY docker/package-list.txt /app/
 
 RUN apt update && \
     apt install -y --no-install-recommends $(grep -v '^#' /app/package-list.txt) && \
