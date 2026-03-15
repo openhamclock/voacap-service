@@ -125,14 +125,16 @@ build_image() {
     # Build the image
     echo
     echo "Building image for '$IMAGE_BASE:$TAG'"
+    pushd "$HERE/.." >/dev/null
     echo $GIT_VERSION > git.version
     if [ $MULTI_PLATFORM == true ]; then
-        docker buildx build $NOCACHE_ARG -t $IMAGE -f Dockerfile --platform linux/amd64,linux/arm64 --push .
+        docker buildx build $NOCACHE_ARG --pull -t $IMAGE -f docker/Dockerfile --platform linux/amd64,linux/arm64 --push .
     else
-        docker build $NOCACHE_ARG -t $IMAGE -f Dockerfile .
+        docker build $NOCACHE_ARG --pull -t $IMAGE -f docker/Dockerfile .
     fi
     rm -f git.version
     RETVAL=$?
+    popd >/dev/null
 }
 
 build_done_message() {
