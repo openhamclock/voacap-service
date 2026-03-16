@@ -208,8 +208,8 @@ def build_area_deck(year, month, utc, txlat, txlng,
         "CIRCUIT   {lat_str:<6s}  {lon_str:>8s}    {lat_str:<6s}  {lon_str:>8s}  {path_ch}     0\n"
         "SYSTEM       1. 145. 0.10  90. {rsn:.1f} 3.00 0.10\n"
         "FPROB      1.00 1.00 1.00 0.00\n"
-        "ANTENNA       1    1    2   30     0.000[default/const17.voa  ] 57.0  500.0000\n"
-        "ANTENNA       2    2    2   30     0.000[default/swwhip.voa   ]  0.0    0.0000\n"
+        "ANTENNA       1    1    2   30     0.000[default/isotrope     ]  0.0  {pow_kw}\n"
+        "ANTENNA       2    2    2   30     0.000[default/isotrope     ]  0.0    0.0000\n"
         "METHOD      130    0\n"
         "EXECUTE\n"
         "QUIT\n"
@@ -223,6 +223,7 @@ def build_area_deck(year, month, utc, txlat, txlng,
         lat_str="{:05.2f}{}".format(lat_abs, lat_hem),
         lon_str="{:06.2f}{}".format(lon_abs, lon_hem),
         path_ch=path_ch,
+        pow_kw=pow_w/1000,
     )
 
 # ---------------------------------------------------------------------------
@@ -408,7 +409,7 @@ def interpolate_grid(vg_data, map_type="REL"):
         (lons_arr, lats_arr), vals_arr,
         (glon, glat),
         method="linear",
-        fill_value=0.0,
+        fill_value=np.nan,
     )
     return grid_rel, glon, glat, vmin, vmax, cmap_colors, cmap_name
 
@@ -499,15 +500,12 @@ def render_map(vg_data, txlat, txlng, mhz, utc, ssn, month, year,
 
         # Build colormap LUT and map grid values -> RGB
         lut = _make_colormap_lut(cmap_colors)
-        clipped = np.clip((grid_rel - vmin) / (vmax - vmin), 0.0, 1.0)
+        safe_grid = np.flipud(np.where(np.isnan(grid_rel), 0.0, grid_rel))
+        clipped = np.clip((safe_grid - vmin) / (vmax - vmin), 0.0, 1.0)
         indices = (clipped * 255).astype(np.uint8)
         rgb = lut[indices]  # shape (H, W, 3)
 
-        # Background color for no-data areas
-        bg_rgb = (10, 10, 10) if night else (26, 26, 26)
-        # Where grid_rel == fill_value (0.0 for vmin>0 types, handle REL too)
-        mask = (grid_rel == 0.0)
-        rgb[mask] = bg_rgb
+        # NaN = outside VOACAP convex hull -- already mapped to index 0 via safe_grid
 
         img = Image.fromarray(rgb.astype(np.uint8), mode="RGB")
         img = img.resize((width, height), Image.BILINEAR)
