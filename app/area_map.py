@@ -58,11 +58,48 @@ SSN_MODE    = os.environ.get("VOACAP_SSN_MODE", "latest").strip().lower()
 DEFAULT_WIDTH  = 800
 DEFAULT_HEIGHT = 400
 
-# Server-side BMP cache -- avoids re-running voacapl on repeated requests
-# Cache dir lives inside the container; mount a volume to persist across restarts
-MODE_RSN = {3:0.0, 38:34.0, 13:10.0, 17:14.0, 22:20.0, 19:17.0, 49:43.0}
-MODE_RSN_DEFAULT = 17.0
-MODE_LABEL = {3:"WSPR", 38:"SSB", 13:"FT8", 17:"FT4", 22:"RTTY", 19:"CW", 49:"AM"}
+# ---------------------------------------------------------------------------
+# Mode → Required SNR mapping
+#
+# HamClock MODE values and their corresponding VOACAP required SNR (dB).
+# RSN=17 for CW is empirically calibrated against CSI reference output.
+# Other modes are placeholders pending their own calibration runs —
+# values are reasonable starting points based on ITU/VOACAP conventions
+# but should be validated against reference data when available.
+#
+# some relative adjustments taken from here:
+# https://www.amateurradio.com/weak-signal-performance-of-common-modulation-formats/
+#
+# MODE  Label   RSN(dB)  Notes
+#  38   SSB     34.0
+#  13   FT8     10.0
+#   3   WSPR     0.0
+#  17   FT4     14.0
+#  22   RTTY    20.0
+#  19   CW      17.0     Calibrated against CSI reference output
+#  49   AM      43.0
+# ---------------------------------------------------------------------------
+MODE_RSN: dict[int, float] = {
+    3:  -4.4,   # WSPR     — calibrated based on reference above
+    38: 29.6,   # SSB      — calibrated based on reference above
+    13:  5.6,   # FT8      — calibrated based on reference above
+    17:  9.6,   # FT4      — calibrated based on reference above
+    22: 15.6,   # RTTY     — calibrated based on reference above
+    19: 12.6,   # CW       — calibrated
+    49: 38.6,   # AM       — calibrated based on reference above
+}
+MODE_RSN_DEFAULT = 9.6   # fallback for unknown mode codes
+
+MODE_LABEL: dict[int, str] = {
+    3:  "WSPR",
+    38: "SSB",
+    13: "FT8",
+    17: "FT4",
+    22: "RTTY",
+    19: "CW",
+    49: "AM",
+}
+
 
 # Portland colormap colours (from pythonprop/voaAreaPlot.py)
 HAMCLOCK_COLORS = [
@@ -208,8 +245,8 @@ def build_area_deck(year, month, utc, txlat, txlng,
         "CIRCUIT   {lat_str:<6s}  {lon_str:>8s}    {lat_str:<6s}  {lon_str:>8s}  {path_ch}     0\n"
         "SYSTEM       1. 145. 0.10  90. {rsn:.1f} 3.00 0.10\n"
         "FPROB      1.00 1.00 1.00 0.00\n"
-        "ANTENNA       1    1    2   30     0.000[default/const17.voa  ] 57.0  500.0000\n"
-        "ANTENNA       2    2    2   30     0.000[default/swwhip.voa   ]  0.0    0.0000\n"
+        "ANTENNA       1    1    2   30     0.000[default/isotrope     ]  0.0  {pow_kw}\n"
+        "ANTENNA       2    2    2   30     0.000[default/isotrope     ]  0.0    0.0000\n"
         "METHOD      130    0\n"
         "EXECUTE\n"
         "QUIT\n"
@@ -223,6 +260,7 @@ def build_area_deck(year, month, utc, txlat, txlng,
         lat_str="{:05.2f}{}".format(lat_abs, lat_hem),
         lon_str="{:06.2f}{}".format(lon_abs, lon_hem),
         path_ch=path_ch,
+        pow_kw=pow_w/1000,
     )
 
 # ---------------------------------------------------------------------------
@@ -404,12 +442,24 @@ def interpolate_grid(vg_data, map_type="REL"):
     grid_lons = np.linspace(-180, 180, 360)
     grid_lats = np.linspace(-90,   90, 180)
     glon, glat = np.meshgrid(grid_lons, grid_lats)
+    # Linear interpolation inside convex hull
     grid_rel = griddata(
         (lons_arr, lats_arr), vals_arr,
         (glon, glat),
         method="linear",
-        fill_value=0.0,
+        fill_value=np.nan,
     )
+
+    # Fill NaN regions (outside convex hull) using nearest-neighbor extrapolation
+    nan_regions = np.isnan(grid_rel)
+    if nan_regions.any():
+        grid_nearest = griddata(
+            (lons_arr, lats_arr), vals_arr,
+            (glon, glat),
+            method="nearest",
+        )
+        grid_rel[nan_regions] = grid_nearest[nan_regions]
+
     return grid_rel, glon, glat, vmin, vmax, cmap_colors, cmap_name
 
 
@@ -499,15 +549,15 @@ def render_map(vg_data, txlat, txlng, mhz, utc, ssn, month, year,
 
         # Build colormap LUT and map grid values -> RGB
         lut = _make_colormap_lut(cmap_colors)
-        clipped = np.clip((grid_rel - vmin) / (vmax - vmin), 0.0, 1.0)
+        nan_mask = np.flipud(np.isnan(grid_rel))
+        safe_grid = np.flipud(np.where(np.isnan(grid_rel), 0.0, grid_rel))
+        clipped = np.clip((safe_grid - vmin) / (vmax - vmin), 0.0, 1.0)
+
         indices = (clipped * 255).astype(np.uint8)
         rgb = lut[indices]  # shape (H, W, 3)
 
-        # Background color for no-data areas
-        bg_rgb = (10, 10, 10) if night else (26, 26, 26)
-        # Where grid_rel == fill_value (0.0 for vmin>0 types, handle REL too)
-        mask = (grid_rel == 0.0)
-        rgb[mask] = bg_rgb
+        # NaN = outside VOACAP convex hull
+        # Uses colormap index 0 (dead zone for REL, black for MUF, blue for TOA)
 
         img = Image.fromarray(rgb.astype(np.uint8), mode="RGB")
         img = img.resize((width, height), Image.BILINEAR)
