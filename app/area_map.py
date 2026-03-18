@@ -128,14 +128,33 @@ HAMCLOCK_COLORS = [
 
 # TOA (Take-Off Angle) colormap -- 0-30 degrees
 # Colors provided by HamClock reference image
+#TOA_COLORS = [
+#    "#0000E8",  #  0 deg
+#    "#B88880",  #  5 deg
+#    "#F09450",  # 10 deg
+#    "#F07038",  # 15 deg
+#    "#F04C28",  # 20 deg
+#    "#F02810",  # 25 deg
+#    "#F00400",  # 30 deg
+#]
+
 TOA_COLORS = [
-    "#0000E8",  #  0 deg
-    "#B88880",  #  5 deg
-    "#F09450",  # 10 deg
-    "#F07038",  # 15 deg
-    "#F04C28",  # 20 deg
-    "#F02810",  # 25 deg
-    "#F00400",  # 30 deg
+    "#0000F0",  #  0 deg  blue
+    "#4838C0",  #  2 deg
+    "#987490",  #  4 deg
+    "#E8AC60",  #  6 deg  tan
+    "#F0A058",  #  8 deg
+    "#F09050",  # 10 deg  orange
+    "#F08448",  # 12 deg
+    "#F07440",  # 14 deg
+    "#F06438",  # 16 deg
+    "#F05830",  # 18 deg
+    "#F04C28",  # 20 deg  (interpolated, label obscured)
+    "#F03820",  # 22 deg
+    "#F02C18",  # 24 deg
+    "#F01C10",  # 26 deg
+    "#F00C08",  # 28 deg
+    "#F00000",  # 30 deg  red
 ]
 TOA_MAX = 30.0  # degrees
 
@@ -243,8 +262,8 @@ def build_area_deck(year, month, utc, txlat, txlng,
         "FREQUENCY ${mhz:.3f}\n"
         "LABEL     OHB   OHB\n"
         "CIRCUIT   {lat_str:<6s}  {lon_str:>8s}    {lat_str:<6s}  {lon_str:>8s}  {path_ch}     0\n"
-        "SYSTEM       1. 145. 0.10  90. {rsn:.1f} 3.00 0.10\n"
-        "FPROB      1.00 1.00 1.00 0.00\n"
+        "SYSTEM       1. 145. 3.00  90. 24.0 3.00 0.00\n"
+        "FPROB      0.00 0.00 0.00 0.00\n"
         "ANTENNA       1    1    2   30     0.000[default/isotrope     ]  0.0  {pow_kw}\n"
         "ANTENNA       2    2    2   30     0.000[default/isotrope     ]  0.0    0.0000\n"
         "METHOD      130    0\n"
@@ -419,26 +438,40 @@ def interpolate_grid(vg_data, map_type="REL"):
     """Interpolate VG1 data onto a regular grid. Returns (grid, glon, glat, vmin, vmax, cmap_colors, cmap_name)."""
     from scipy.interpolate import griddata
 
+    raw = vg_data["raw"]
+
     if map_type == "TOA":
         cmap_colors = TOA_COLORS
         cmap_name   = "hamclock_toa"
         vmin, vmax  = 0.0, TOA_MAX
-        vals_arr    = np.array([p[3] for p in vg_data["raw"]], dtype=np.float32)
+#        vals_arr    = np.array([p[3] for p in vg_data["raw"]], dtype=np.float32)
+        # Filter out VOACAP no-propagation sentinel (<=1.0 deg clamp)
+        toa_pts = [(p[0], p[1], p[3]) for p in raw if 1.0 < p[3] <= 30.0]
+        if not toa_pts:
+           toa_pts = [(p[0], p[1], p[3]) for p in raw]
+        lats_arr = np.array([p[0] for p in toa_pts], dtype=np.float32)
+        lons_arr = np.array([p[1] for p in toa_pts], dtype=np.float32)
+        vals_arr = np.array([p[2] * 0.32 for p in toa_pts], dtype=np.float32)
     elif map_type == "MUF":
         cmap_colors = MUF_COLORS
         cmap_name   = "hamclock_muf"
         vmin, vmax  = 0.0, MUF_MAX
-        vals_arr    = np.array([p[4] for p in vg_data["raw"]], dtype=np.float32)
+#        vals_arr    = np.array([p[4] for p in vg_data["raw"]], dtype=np.float32)
+        lats_arr = np.array([p[0] for p in raw], dtype=np.float32)
+        lons_arr = np.array([p[1] for p in raw], dtype=np.float32)
+        vals_arr = np.array([p[4] for p in raw], dtype=np.float32)
     else:
         cmap_colors = HAMCLOCK_COLORS
         cmap_name   = "hamclock_rel"
         vmin, vmax  = 0.0, 1.0
-        vals_arr    = np.array([p[2] for p in vg_data["raw"]], dtype=np.float32)
+        #vals_arr    = np.array([p[2] for p in vg_data["raw"]], dtype=np.float32)
 
-    raw      = vg_data["raw"]
-    lats_arr = np.array([p[0] for p in raw], dtype=np.float32)
-    lons_arr = np.array([p[1] for p in raw], dtype=np.float32)
-
+#    raw      = vg_data["raw"]
+#    lats_arr = np.array([p[0] for p in raw], dtype=np.float32)
+#    lons_arr = np.array([p[1] for p in raw], dtype=np.float32)
+        lats_arr = np.array([p[0] for p in raw], dtype=np.float32)
+        lons_arr = np.array([p[1] for p in raw], dtype=np.float32)
+        vals_arr = np.array([p[2] * 0.32 for p in raw], dtype=np.float32)
     grid_lons = np.linspace(-180, 180, 360)
     grid_lats = np.linspace(-90,   90, 180)
     glon, glat = np.meshgrid(grid_lons, grid_lats)
@@ -458,7 +491,7 @@ def interpolate_grid(vg_data, map_type="REL"):
             (glon, glat),
             method="nearest",
         )
-        grid_rel[nan_regions] = grid_nearest[nan_regions]
+        grid_rel[nan_regions] = np.clip(grid_nearest[nan_regions], 0.0, 20.0 if map_type == "TOA" else 1e9)
 
     return grid_rel, glon, glat, vmin, vmax, cmap_colors, cmap_name
 
@@ -505,7 +538,7 @@ def _make_colormap_lut(colors_hex, n=256):
     return lut
 
 
-def _draw_geom_lines(draw, geom, width, height, color):
+def _draw_geom_lines(draw, geom, width, height, color, line_width=1):
     """Draw shapely geometry edges onto a PIL ImageDraw."""
     from shapely.geometry import MultiLineString, LineString, MultiPolygon, Polygon, GeometryCollection
     def lonlat_to_xy(lon, lat):
@@ -515,7 +548,7 @@ def _draw_geom_lines(draw, geom, width, height, color):
     def draw_line(coords):
         pts = [lonlat_to_xy(lo, la) for lo, la in coords]
         if len(pts) >= 2:
-            draw.line(pts, fill=color, width=1)
+            draw.line(pts, fill=color, width=line_width)
     def draw_geom(g):
         if isinstance(g, (LineString,)):
             draw_line(g.coords)
@@ -566,15 +599,22 @@ def render_map(vg_data, txlat, txlng, mhz, utc, ssn, month, year,
 
         # Draw coastlines and borders
         for geom in _COASTLINES:
-            _draw_geom_lines(draw, geom, width, height, (0, 0, 0))
+            _draw_geom_lines(draw, geom, width, height, (0, 0, 0), line_width=2)
         for geom in _BORDERS:
-            _draw_geom_lines(draw, geom, width, height, (0, 0, 0))
+            _draw_geom_lines(draw, geom, width, height, (0, 0, 0), line_width=3)
 
         # TX marker (open circle)
         tx_x = int((txlng + 180.0) / 360.0 * width)
         tx_y = int((90.0 - txlat)  / 180.0 * height)
         r = 5
         draw.ellipse([tx_x-r, tx_y-r, tx_x+r, tx_y+r], outline=(255, 0, 0), width=2)
+
+        # Day map: add subtle white haze to distinguish from night
+        if not night:
+            from PIL import Image as _Img
+            haze = _Img.new('RGBA', img.size, (255, 255, 255, 40))
+            img = img.convert('RGBA')
+            img = _Img.alpha_composite(img, haze).convert('RGB')
 
         buf = io.BytesIO()
         img.save(buf, format="PNG")
