@@ -451,7 +451,7 @@ def interpolate_grid(vg_data, map_type="REL"):
            toa_pts = [(p[0], p[1], p[3]) for p in raw]
         lats_arr = np.array([p[0] for p in toa_pts], dtype=np.float32)
         lons_arr = np.array([p[1] for p in toa_pts], dtype=np.float32)
-        vals_arr = np.array([p[2] for p in toa_pts], dtype=np.float32)
+        vals_arr = np.array([p[2] * 0.32 for p in toa_pts], dtype=np.float32)
     elif map_type == "MUF":
         cmap_colors = MUF_COLORS
         cmap_name   = "hamclock_muf"
@@ -471,7 +471,7 @@ def interpolate_grid(vg_data, map_type="REL"):
 #    lons_arr = np.array([p[1] for p in raw], dtype=np.float32)
         lats_arr = np.array([p[0] for p in raw], dtype=np.float32)
         lons_arr = np.array([p[1] for p in raw], dtype=np.float32)
-        vals_arr = np.array([p[2] for p in raw], dtype=np.float32)
+        vals_arr = np.array([p[2] * 0.32 for p in raw], dtype=np.float32)
     grid_lons = np.linspace(-180, 180, 360)
     grid_lats = np.linspace(-90,   90, 180)
     glon, glat = np.meshgrid(grid_lons, grid_lats)
