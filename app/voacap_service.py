@@ -145,11 +145,36 @@ def _read_ssn_file(path: str) -> float | None:
         log.warning("Error reading SSN file %s: %s", path, exc)
         return None
 
+# ---------------------------------------------------------------------------
+# SSN
+# ---------------------------------------------------------------------------
 
-def estimate_ssn(year: int, month: int) -> float:
-    """SC25 model fallback — peak ~180 at 2025, exponential decay."""
-    t = (year - 2025) + (month - 1) / 12.0
-    return max(1.0, min(300.0, round(180 * math.exp(-0.3 * abs(t)), 1)))
+def _read_ssn_file(path):
+    try:
+        with open(path) as f:
+            lines = [l.strip() for l in f if l.strip()]
+        values = []
+        for line in lines:
+            parts = line.split()
+            if len(parts) >= 4:
+                try:
+                    values.append(float(parts[3]))
+                except ValueError:
+                    pass
+        if not values:
+            return None
+        return values[-1] if SSN_MODE != "average" else round(sum(values)/len(values), 1)
+    except Exception:
+        return None
+
+def _resolve_ssn(params, year, month):
+    if "SSN" in params:
+        try:
+            return float(params["SSN"])
+        except ValueError:
+            pass
+    v = _read_ssn_file(SSN_FILE) if SSN_FILE else None
+    return v if v is not None else _estimate_ssn(year, month)
 
 
 # ---------------------------------------------------------------------------
