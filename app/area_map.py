@@ -444,7 +444,6 @@ def interpolate_grid(vg_data, map_type="REL"):
         cmap_colors = TOA_COLORS
         cmap_name   = "hamclock_toa"
         vmin, vmax  = 0.0, TOA_MAX
-#        vals_arr    = np.array([p[3] for p in vg_data["raw"]], dtype=np.float32)
         # Filter out VOACAP no-propagation sentinel (<=1.0 deg clamp)
         toa_pts = [(p[0], p[1], p[3]) for p in raw if 1.0 < p[3] <= 30.0]
         if not toa_pts:
@@ -456,7 +455,6 @@ def interpolate_grid(vg_data, map_type="REL"):
         cmap_colors = MUF_COLORS
         cmap_name   = "hamclock_muf"
         vmin, vmax  = 0.0, MUF_MAX
-#        vals_arr    = np.array([p[4] for p in vg_data["raw"]], dtype=np.float32)
         lats_arr = np.array([p[0] for p in raw], dtype=np.float32)
         lons_arr = np.array([p[1] for p in raw], dtype=np.float32)
         vals_arr = np.array([p[4] for p in raw], dtype=np.float32)
@@ -464,20 +462,31 @@ def interpolate_grid(vg_data, map_type="REL"):
         cmap_colors = HAMCLOCK_COLORS
         cmap_name   = "hamclock_rel"
         vmin, vmax  = 0.0, 1.0
-        #vals_arr    = np.array([p[2] for p in vg_data["raw"]], dtype=np.float32)
-
-#    raw      = vg_data["raw"]
-#    lats_arr = np.array([p[0] for p in raw], dtype=np.float32)
-#    lons_arr = np.array([p[1] for p in raw], dtype=np.float32)
         lats_arr = np.array([p[0] for p in raw], dtype=np.float32)
         lons_arr = np.array([p[1] for p in raw], dtype=np.float32)
         vals_arr = np.array([p[2] for p in raw], dtype=np.float32)
     grid_lons = np.linspace(-180, 180, 360)
     grid_lats = np.linspace(-90,   90, 180)
     glon, glat = np.meshgrid(grid_lons, grid_lats)
+
+    # Wrap data points at ±180° to eliminate the date line seam.
+    # Duplicate points near the edges shifted by ±360° so the interpolator
+    # has data on both sides of the boundary.
+    wrap_mask_pos = lons_arr > 90
+    wrap_mask_neg = lons_arr < -90
+    lons_wrapped = np.concatenate([lons_arr,
+                                   lons_arr[wrap_mask_pos] - 360.0,
+                                   lons_arr[wrap_mask_neg] + 360.0])
+    lats_wrapped = np.concatenate([lats_arr,
+                                   lats_arr[wrap_mask_pos],
+                                   lats_arr[wrap_mask_neg]])
+    vals_wrapped = np.concatenate([vals_arr,
+                                   vals_arr[wrap_mask_pos],
+                                   vals_arr[wrap_mask_neg]])
+
     # Linear interpolation inside convex hull
     grid_rel = griddata(
-        (lons_arr, lats_arr), vals_arr,
+        (lons_wrapped, lats_wrapped), vals_wrapped,
         (glon, glat),
         method="linear",
         fill_value=np.nan,
@@ -487,7 +496,7 @@ def interpolate_grid(vg_data, map_type="REL"):
     nan_regions = np.isnan(grid_rel)
     if nan_regions.any():
         grid_nearest = griddata(
-            (lons_arr, lats_arr), vals_arr,
+            (lons_wrapped, lats_wrapped), vals_wrapped,
             (glon, glat),
             method="nearest",
         )
