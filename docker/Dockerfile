@@ -17,7 +17,7 @@
 # Test:
 #   curl "http://localhost:8080/fetchBandConditions?YEAR=2026&MONTH=1&RXLAT=0&RXLNG=0&TXLAT=28&TXLNG=-81&PATH=0&POW=100&MODE=19&TOA=3.0"
 
-FROM debian:13.3-slim AS builder
+FROM debian:13.4-slim AS builder
 
 WORKDIR /build/voacapl
 
@@ -42,7 +42,7 @@ RUN git clone --depth=1 https://github.com/jawatson/voacapl.git /build/voacapl &
     make install DESTDIR=/build/install
 
 # ---------------------------------------------------------------------------
-FROM debian:13.3-slim
+FROM debian:13.4-slim
 
 LABEL org.opencontainers.image.title="voacap-service"
 LABEL org.opencontainers.image.description="VOACAP HF propagation service for HamClock (OHB)"
