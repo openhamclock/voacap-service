@@ -474,15 +474,39 @@ def interpolate_grid(vg_data, map_type="REL"):
     # has data on both sides of the boundary.
     wrap_mask_pos = lons_arr > 90
     wrap_mask_neg = lons_arr < -90
+
+    # Assuming your lats_arr is sorted, we find the highest unique latitude 
+    # that isn't the pole itself.
+    unique_lats = np.unique(lats_arr)
+    near_pole_lat = unique_lats[-1] # The highest latitude available in your data
+
+    # Get all data points sitting on that latitude line
+    near_pole_mask = lats_arr == near_pole_lat
+
+    # We create a new set of points at 90.0N using the values from that last row
+    pole_lons = np.linspace(-180, 180, 100) # Dense enough to "seal" the grid
+    pole_lats = np.full_like(pole_lons, 90.0)
+
+    # This repeats the values from your near_pole_lat across the entire 90N line
+    # Note: If your last row has multiple longitudes, you might want to interpolate 
+    # those onto these new pole_lons, but usually, just repeating the values works.
+    pole_vals = np.interp(pole_lons, lons_arr[near_pole_mask], vals_arr[near_pole_mask])
+
     lons_wrapped = np.concatenate([lons_arr,
                                    lons_arr[wrap_mask_pos] - 360.0,
-                                   lons_arr[wrap_mask_neg] + 360.0])
+                                   lons_arr[wrap_mask_neg] + 360.0,
+                                   pole_lons
+    ])
     lats_wrapped = np.concatenate([lats_arr,
                                    lats_arr[wrap_mask_pos],
-                                   lats_arr[wrap_mask_neg]])
+                                   lats_arr[wrap_mask_neg],
+                                   pole_lats
+    ])
     vals_wrapped = np.concatenate([vals_arr,
                                    vals_arr[wrap_mask_pos],
-                                   vals_arr[wrap_mask_neg]])
+                                   vals_arr[wrap_mask_neg],
+                                   pole_vals
+    ])
 
     # Linear interpolation inside convex hull
     grid_rel = griddata(
