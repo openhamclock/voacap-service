@@ -2,7 +2,8 @@
 area_map.py -- VOACAP area coverage map (METHOD 130 / VOAAREA)
 
 Copyright (C) 2026 Open HamClock Backend (OHB) Contributors
-AGPL-3.0
+License: GNU Affero General Public License v3.0 (AGPLv3)
+See LICENSE file or <https://www.gnu.org/licenses/agpl-3.0.html>
 
 Pipeline:
   1. Build DA1 deck from request params (based on shipped voaareax.da1 sample)
