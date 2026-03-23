@@ -44,8 +44,6 @@ RUN git clone --depth=1 https://github.com/jawatson/voacapl.git /build/voacapl &
 # ---------------------------------------------------------------------------
 FROM debian:13.4-slim
 
-ARG GIT_VERSION
-
 WORKDIR /app
 
 LABEL org.opencontainers.image.title="voacap-service"
@@ -58,6 +56,8 @@ RUN apt update && \
     apt install -y --no-install-recommends $(grep -v '^#' /app/package-list.txt) && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
+
+ARG GIT_VERSION
 
 COPY --from=builder /build/install/usr/local/bin/ /usr/local/bin/
 COPY --from=builder /build/install/usr/local/share/ /usr/local/share/
