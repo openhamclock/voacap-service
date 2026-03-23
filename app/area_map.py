@@ -86,7 +86,7 @@ MODE_RSN: dict[int, float] = {
     13:  5.6,   # FT8      — calibrated based on reference above
     17:  9.6,   # FT4      — calibrated based on reference above
     22: 15.6,   # RTTY     — calibrated based on reference above
-    19: 12.6,   # CW       — calibrated
+    19: 17.0,   # CW       — calibrated
     49: 38.6,   # AM       — calibrated based on reference above
 }
 MODE_RSN_DEFAULT = 9.6   # fallback for unknown mode codes
@@ -220,6 +220,15 @@ def _resolve_ssn(params, year, month):
     v = _read_ssn_file(SSN_FILE) if SSN_FILE else None
     return v if v is not None else _estimate_ssn(year, month)
 
+def fmt_4c(flt: float) -> str:
+    if flt >= 100.0: 
+        return f"{flt:4.1f}"[0:4]
+    elif flt >= 10.0:
+        return f"{flt:4.1f}"
+    elif flt >= 1.0:
+        return f"{flt:4.2f}"
+    else:
+        return f"{flt:.3f}"[1:]           # start at slice 1 to skip leading 0
 # ---------------------------------------------------------------------------
 # DA1 deck builder
 #
@@ -231,7 +240,7 @@ def _resolve_ssn(params, year, month):
 # ---------------------------------------------------------------------------
 
 def build_area_deck(year, month, utc, txlat, txlng,
-                    path, pow_w, mhz, ssn, rsn,
+                    path, pow_w, mhz, ssn, rsn, toa,
                     out_subdir="ohb", out_name="pyArea"):
 
     utc_voa  = utc if utc > 0 else 24
@@ -243,7 +252,7 @@ def build_area_deck(year, month, utc, txlat, txlng,
 
     # COMMENT line 1 controls VG1 output path -- pad to 80 chars
     comment1 = "COMMENT   VOACAP    {}/{}.voa".format(out_subdir, out_name).ljust(80)
-
+    pow_kw=pow_w/1000
     return (
         comment1 + "\n"
         "COMMENT       0    4   -1   -1    1    0 receive.cty\n"
@@ -263,7 +272,7 @@ def build_area_deck(year, month, utc, txlat, txlng,
         "FREQUENCY ${mhz:.3f}\n"
         "LABEL     OHB   OHB\n"
         "CIRCUIT   {lat_str:<6s}  {lon_str:>8s}    {lat_str:<6s}  {lon_str:>8s}  {path_ch}     0\n"
-        "SYSTEM       1. 145. 3.00  90. 24.0 3.00 0.00\n"
+        "SYSTEM     {fp} 145. {ta}  90. {rn} 3.00 0.00\n"
         "FPROB      0.00 0.00 0.00 0.00\n"
         "ANTENNA       1    1    2   30     0.000[default/isotrope     ]  0.0  {pow_kw}\n"
         "ANTENNA       2    2    2   30     0.000[default/isotrope     ]  0.0    0.0000\n"
@@ -281,6 +290,9 @@ def build_area_deck(year, month, utc, txlat, txlng,
         lon_str="{:06.2f}{}".format(lon_abs, lon_hem),
         path_ch=path_ch,
         pow_kw=pow_w/1000,
+        fp=fmt_4c(pow_kw),
+        ta=fmt_4c(toa),
+        rn=fmt_4c(rsn)
     )
 
 # ---------------------------------------------------------------------------
@@ -823,7 +835,7 @@ def handle_area_request(params, start_response, environ={}):
 
     import time as _time
     t0 = _time.time()
-    deck = build_area_deck(year, month, utc, txlat, txlng, path, pow_w, mhz, ssn, rsn)
+    deck = build_area_deck(year, month, utc, txlat, txlng, path, pow_w, mhz, ssn, rsn, toa)
     vg1_path, tmp_dir = run_voaarea(deck)
     log.info("TIMING voacapl: %.2fs", _time.time()-t0); t1=_time.time()
     try:
