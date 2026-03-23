@@ -458,17 +458,19 @@ def interpolate_grid(vg_data, map_type="REL"):
         cmap_colors = TOA_COLORS
         cmap_name   = "hamclock_toa"
         vmin, vmax  = 0.0, TOA_MAX
+#        vals_arr    = np.array([p[3] for p in vg_data["raw"]], dtype=np.float32)
         # Filter out VOACAP no-propagation sentinel (<=1.0 deg clamp)
         toa_pts = [(p[0], p[1], p[3]) for p in raw if 1.0 < p[3] <= 30.0]
         if not toa_pts:
            toa_pts = [(p[0], p[1], p[3]) for p in raw]
         lats_arr = np.array([p[0] for p in toa_pts], dtype=np.float32)
         lons_arr = np.array([p[1] for p in toa_pts], dtype=np.float32)
-        vals_arr = np.array([p[2] * 0.32 for p in toa_pts], dtype=np.float32)
+        vals_arr = np.array([p[2] for p in toa_pts], dtype=np.float32)
     elif map_type == "MUF":
         cmap_colors = MUF_COLORS
         cmap_name   = "hamclock_muf"
         vmin, vmax  = 0.0, MUF_MAX
+#        vals_arr    = np.array([p[4] for p in vg_data["raw"]], dtype=np.float32)
         lats_arr = np.array([p[0] for p in raw], dtype=np.float32)
         lons_arr = np.array([p[1] for p in raw], dtype=np.float32)
         vals_arr = np.array([p[4] for p in raw], dtype=np.float32)
@@ -476,6 +478,11 @@ def interpolate_grid(vg_data, map_type="REL"):
         cmap_colors = HAMCLOCK_COLORS
         cmap_name   = "hamclock_rel"
         vmin, vmax  = 0.0, 1.0
+        #vals_arr    = np.array([p[2] for p in vg_data["raw"]], dtype=np.float32)
+
+#    raw      = vg_data["raw"]
+#    lats_arr = np.array([p[0] for p in raw], dtype=np.float32)
+#    lons_arr = np.array([p[1] for p in raw], dtype=np.float32)
         lats_arr = np.array([p[0] for p in raw], dtype=np.float32)
         lons_arr = np.array([p[1] for p in raw], dtype=np.float32)
         vals_arr = np.array([p[2] for p in raw], dtype=np.float32)
@@ -488,39 +495,15 @@ def interpolate_grid(vg_data, map_type="REL"):
     # has data on both sides of the boundary.
     wrap_mask_pos = lons_arr > 90
     wrap_mask_neg = lons_arr < -90
-
-    # Assuming your lats_arr is sorted, we find the highest unique latitude 
-    # that isn't the pole itself.
-    unique_lats = np.unique(lats_arr)
-    near_pole_lat = unique_lats[-1] # The highest latitude available in your data
-
-    # Get all data points sitting on that latitude line
-    near_pole_mask = lats_arr == near_pole_lat
-
-    # We create a new set of points at 90.0N using the values from that last row
-    pole_lons = np.linspace(-180, 180, 100) # Dense enough to "seal" the grid
-    pole_lats = np.full_like(pole_lons, 90.0)
-
-    # This repeats the values from your near_pole_lat across the entire 90N line
-    # Note: If your last row has multiple longitudes, you might want to interpolate 
-    # those onto these new pole_lons, but usually, just repeating the values works.
-    pole_vals = np.interp(pole_lons, lons_arr[near_pole_mask], vals_arr[near_pole_mask])
-
     lons_wrapped = np.concatenate([lons_arr,
                                    lons_arr[wrap_mask_pos] - 360.0,
-                                   lons_arr[wrap_mask_neg] + 360.0,
-                                   pole_lons
-    ])
+                                   lons_arr[wrap_mask_neg] + 360.0])
     lats_wrapped = np.concatenate([lats_arr,
                                    lats_arr[wrap_mask_pos],
-                                   lats_arr[wrap_mask_neg],
-                                   pole_lats
-    ])
+                                   lats_arr[wrap_mask_neg]])
     vals_wrapped = np.concatenate([vals_arr,
                                    vals_arr[wrap_mask_pos],
-                                   vals_arr[wrap_mask_neg],
-                                   pole_vals
-    ])
+                                   vals_arr[wrap_mask_neg]])
 
     # Linear interpolation inside convex hull
     grid_rel = griddata(
@@ -546,6 +529,7 @@ def interpolate_grid(vg_data, map_type="REL"):
 # Coastline polygons loaded once at module level
 _COASTLINES = None
 _BORDERS    = None
+_COAST_CACHE = {}
 
 def _load_coastlines():
     """Load Natural Earth coastline/border polygons from cartopy cache."""
@@ -644,11 +628,20 @@ def render_map(vg_data, txlat, txlng, mhz, utc, ssn, month, year,
 
         draw = ImageDraw.Draw(img)
 
-        # Draw coastlines and borders
-        for geom in _COASTLINES:
-            _draw_geom_lines(draw, geom, width, height, (0, 0, 0), line_width=2)
-        for geom in _BORDERS:
-            _draw_geom_lines(draw, geom, width, height, (0, 0, 0), line_width=3)
+        # Draw coastlines and borders (cached per size)
+        coast_key = (width, height)
+        if coast_key not in _COAST_CACHE:
+            from PIL import Image as _CI
+            _coast_img = _CI.new("RGBA", (width, height), (0, 0, 0, 0))
+            _coast_draw = ImageDraw.Draw(_coast_img)
+            for geom in _COASTLINES:
+                _draw_geom_lines(_coast_draw, geom, width, height, (0, 0, 0, 255), line_width=2)
+            for geom in _BORDERS:
+                _draw_geom_lines(_coast_draw, geom, width, height, (0, 0, 0, 255), line_width=3)
+            _COAST_CACHE[coast_key] = _coast_img
+        img = img.convert("RGBA")
+        img = Image.alpha_composite(img, _COAST_CACHE[coast_key])
+        img = img.convert("RGB")
 
         # TX marker (open circle)
         tx_x = int((txlng + 180.0) / 360.0 * width)
@@ -659,9 +652,9 @@ def render_map(vg_data, txlat, txlng, mhz, utc, ssn, month, year,
         # Day map: add subtle white haze to distinguish from night
         if not night:
             from PIL import Image as _Img
-            haze = _Img.new('RGBA', img.size, (255, 255, 255, 40))
-            img = img.convert('RGBA')
-            img = _Img.alpha_composite(img, haze).convert('RGB')
+            haze = _Img.new("RGBA", img.size, (255, 255, 255, 40))
+            img = img.convert("RGBA")
+            img = _Img.alpha_composite(img, haze).convert("RGB")
 
         buf = io.BytesIO()
         img.save(buf, format="PNG")
@@ -704,7 +697,6 @@ def png_to_bmp565(png_bytes, width, height):
     from PIL import Image
     img = Image.open(io.BytesIO(png_bytes)).convert("RGB")
     img = img.resize((width, height), Image.LANCZOS)
-    pixels = list(img.getdata())
 
     row_bytes = width * 2
     # BMP rows must be padded to 4-byte boundary (already aligned for even widths)
@@ -746,17 +738,24 @@ def png_to_bmp565(png_bytes, width, height):
         0x001F,  # blue mask
     ) + b"\x00" * 56  # color space padding to reach 108-byte BITMAPV4HEADER
 
-    # Pixel data -- top-down rows (matches negative biHeight / CSI format)
-    row_pad = b"\x00" * pad
-    pixel_buf = bytearray()
-    for y in range(0, height):
-        for x in range(width):
-            r, g, b = pixels[y * width + x]
-            pixel_buf += struct.pack("<H",
-                ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3))
-        pixel_buf += row_pad
+    # Pixel data -- vectorized numpy RGB565 conversion (fast for large images)
+    arr = np.array(img)  # shape (H, W, 3) uint8
+    r = arr[:, :, 0].astype(np.uint16)
+    g = arr[:, :, 1].astype(np.uint16)
+    b = arr[:, :, 2].astype(np.uint16)
+    rgb565 = ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3)
+    # Convert to little-endian bytes
+    pixel_data = rgb565.astype('<u2').tobytes()
+    # Add row padding if needed
+    if pad > 0:
+        rows = []
+        row_size = width * 2
+        pad_bytes = b"\x00" * pad
+        for y in range(height):
+            rows.append(pixel_data[y*row_size:(y+1)*row_size] + pad_bytes)
+        pixel_data = b"".join(rows)
 
-    return bytes(file_header) + dib_header + masks_and_cs + bytes(pixel_buf)
+    return bytes(file_header) + dib_header + masks_and_cs + pixel_data
 
 # ---------------------------------------------------------------------------
 # WSGI handler
