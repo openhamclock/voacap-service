@@ -80,16 +80,17 @@ BANDS_MHZ = [3.75, 5.36, 7.15, 10.13, 14.18, 18.12, 21.23, 24.94, 28.85]
 #  19   CW      17.0     Calibrated against CSI reference output
 #  49   AM      43.0
 # ---------------------------------------------------------------------------
+MODE_RSN_BASE = -4.4
 MODE_RSN: dict[int, float] = {
-    3:  -4.4,   # WSPR     — calibrated based on reference above
-    38: 29.6,   # SSB      — calibrated based on reference above
-    13:  5.6,   # FT8      — calibrated based on reference above
-    17:  9.6,   # FT4      — calibrated based on reference above
-    22: 15.6,   # RTTY     — calibrated based on reference above
-    19: 12.6,   # CW       — calibrated
-    49: 38.6,   # AM       — calibrated based on reference above
+    3:  MODE_RSN_BASE+ 0.0,   # WSPR     — calibrated based on reference above
+    38: MODE_RSN_BASE+34.0,   # SSB      — calibrated based on reference above
+    13: MODE_RSN_BASE+10.0,   # FT8      — calibrated based on reference above
+    17: MODE_RSN_BASE+14.0,   # FT4      — calibrated based on reference above
+    22: MODE_RSN_BASE+20.0,   # RTTY     — calibrated based on reference above
+    19: MODE_RSN_BASE+17.0,   # CW       — calibrated
+    49: MODE_RSN_BASE+43.0,   # AM       — calibrated based on reference above
 }
-MODE_RSN_DEFAULT = 17.0   # fallback for unknown mode codes
+MODE_RSN_DEFAULT = (MODE_RSN_BASE+17.0)   # fallback for unknown mode codes
 
 MODE_LABEL: dict[int, str] = {
     3:  "WSPR",
@@ -148,6 +149,11 @@ def _read_ssn_file(path: str) -> float | None:
 # ---------------------------------------------------------------------------
 # SSN
 # ---------------------------------------------------------------------------
+def estimate_ssn(year: int, month: int) -> float:
+    """SC25 model fallback — peak ~180 at 2025, exponential decay."""
+    t = (year - 2025) + (month - 1) / 12.0
+    return max(1.0, min(300.0, round(180 * math.exp(-0.3 * abs(t)), 1)))
+
 
 def _read_ssn_file(path):
     try:
@@ -203,7 +209,7 @@ def build_deck(
     txlat: float, txlng: float,
     rxlat: float, rxlng: float,
     path: int, pow_kw: float, ssn: float,
-    rsn: float = 17.0,
+    rsn: float, toa: float,
 ) -> str:
     def lat(deg):
         return ("%.2f" % abs(deg)).rjust(5) + ("N" if deg >= 0 else "S")
@@ -229,7 +235,7 @@ def build_deck(
         + ("%.2f"  % 3.00  ).rjust(5)
         + ("%.0f"  % 90    ).rjust(5)
         + ("%.2f"  % rsn   ).rjust(5)
-        + ("%.2f"  % 3.00  ).rjust(5)
+        + ("%.2f"  % toa   ).rjust(5)
         + ("%.2f"  % 0.00  ).rjust(5)
     )
 
@@ -474,7 +480,7 @@ def _handle_band_conditions(params, start_response):
         mode_label, rsn, toa, ssn,
     )
 
-    deck  = build_deck(year, month, txlat, txlng, rxlat, rxlng, path, pow_kw, ssn, rsn)
+    deck  = build_deck(year, month, txlat, txlng, rxlat, rxlng, path, pow_kw, ssn, rsn, toa)
     lines = run_voacap(deck)
     rel   = parse_rel(lines) if lines else [[0.0] * 9] * 24
 
