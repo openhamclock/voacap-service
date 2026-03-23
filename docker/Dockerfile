@@ -44,24 +44,23 @@ RUN git clone --depth=1 https://github.com/jawatson/voacapl.git /build/voacapl &
 # ---------------------------------------------------------------------------
 FROM debian:13.4-slim
 
+ARG GIT_VERSION
+
+WORKDIR /app
+
 LABEL org.opencontainers.image.title="voacap-service"
 LABEL org.opencontainers.image.description="VOACAP HF propagation service for HamClock (OHB)"
 LABEL org.opencontainers.image.licenses="AGPL-3.0"
 LABEL org.opencontainers.image.source="https://github.com/your-org/open-hamclock-backend"
 
-COPY --from=builder /build/install/usr/local/bin/ /usr/local/bin/
-COPY --from=builder /build/install/usr/local/share/ /usr/local/share/
 COPY docker/package-list.txt /app/
-
 RUN apt update && \
     apt install -y --no-install-recommends $(grep -v '^#' /app/package-list.txt) && \
     apt-get clean && \
-    rm -rf /var/lib/apt/lists/* && \
-    # \
-    chmod 755 /usr/local/bin/voacapl && \
-    chmod +x /usr/local/bin/* && \
-    makeitshfbc
+    rm -rf /var/lib/apt/lists/*
 
+COPY --from=builder /build/install/usr/local/bin/ /usr/local/bin/
+COPY --from=builder /build/install/usr/local/share/ /usr/local/share/
 COPY app/voacap_service.py /app/voacap_service.py
 COPY app/area_map.py       /app/area_map.py
 COPY app/uwsgi.ini         /app/uwsgi.ini
@@ -70,15 +69,19 @@ COPY app/entrypoint.sh     /app/entrypoint.sh
 
 # Patch version file to use IONCAP absorption model at build time.
 # entrypoint.sh re-applies this in case the data dir is mounted externally.
-RUN VERSION_FILE=/usr/local/share/voacapl/itshfbc/database/version.w32 && \
+RUN chmod 755 /usr/local/bin/voacapl && \
+    chmod +x /usr/local/bin/* && \
+    makeitshfbc && \
+    \
+    VERSION_FILE=/usr/local/share/voacapl/itshfbc/database/version.w32 && \
     if [ -f "$VERSION_FILE" ]; then \
         sed -i 's/Version \([0-9.]*\)W/Version \1I/' "$VERSION_FILE"; \
         echo "Patched: $(cat $VERSION_FILE)"; \
-    fi
-
-RUN chmod +x /app/entrypoint.sh
-
-RUN rm -f /etc/nginx/sites-enabled/default /etc/nginx/conf.d/default.conf
+    fi && \
+    \
+    chmod +x /app/entrypoint.sh && \
+    rm -f /etc/nginx/sites-enabled/default /etc/nginx/conf.d/default.conf && \
+    echo $GIT_VERSION > /app/git.version
 
 ENV VOACAP_BIN=/usr/local/bin/voacapl
 ENV VOACAP_AREA=/usr/local/share/voacapl/itshfbc
