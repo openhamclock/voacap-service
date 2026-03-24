@@ -543,6 +543,18 @@ def _load_coastlines():
         _COASTLINES = list(shpreader.Reader(coast_shp).geometries())
         _BORDERS    = list(shpreader.Reader(border_shp).geometries())
         log.info("Coastlines loaded: %d coast, %d border geoms", len(_COASTLINES), len(_BORDERS))
+        # Pre-warm coast cache for common HamClock screen sizes in a background thread
+        from PIL import Image as _PI, ImageDraw as _PID
+        for _w, _h in [(660,330),(800,400),(1320,660),(1980,990),(2640,1320),(3960,1980),(5280,2640),(5940,2970),(7920,3960)]:
+            if (_w, _h) not in _COAST_CACHE:
+                _ci = _PI.new("RGBA", (_w, _h), (0,0,0,0))
+                _cd = _PID.Draw(_ci)
+                for _g in _COASTLINES:
+                    _draw_geom_lines(_cd, _g, _w, _h, (0,0,0,255), line_width=2)
+                for _g in _BORDERS:
+                    _draw_geom_lines(_cd, _g, _w, _h, (0,0,0,255), line_width=3)
+                _COAST_CACHE[(_w, _h)] = _ci
+                log.info("Coast cache warmed: %dx%d", _w, _h)
     except Exception as e:
         log.warning("Could not load coastlines: %s", e)
         _COASTLINES = []
@@ -862,3 +874,6 @@ def handle_area_request(params, start_response, environ={}):
     bmp_night = png_to_bmp565(png_night, width, height)
     log.info("TIMING bmp565: %.2fs  TOTAL: %.2fs", _time.time()-t4, _time.time()-t0)
     return _build_response(bmp_day, bmp_night, environ, start_response, "OHB-voacap-area")
+
+# Trigger coastline load at startup
+_load_coastlines()
