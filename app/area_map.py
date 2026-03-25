@@ -45,6 +45,11 @@ import logging
 
 import numpy as np
 
+import datetime
+import ephem
+
+from PIL import Image as _PI, ImageDraw as _PID, ImageFilter
+
 log = logging.getLogger("voacap_service.area_map")
 
 # ---------------------------------------------------------------------------
@@ -631,7 +636,7 @@ def _draw_geom_lines(draw, geom, width, height, color, line_width=1):
 
 
 def render_map(vg_data, txlat, txlng, mhz, utc, ssn, month, year,
-               mode_label, width, height, night=False, map_type="REL",
+               mode_label, width, height, map_type="REL",
                _precomputed=None):
     """
     Render coverage map using PIL (fast). Returns PNG bytes.
@@ -686,11 +691,11 @@ def render_map(vg_data, txlat, txlng, mhz, utc, ssn, month, year,
         draw.ellipse([tx_x-r, tx_y-r, tx_x+r, tx_y+r], outline=(255, 0, 0), width=2)
 
         # Day map: add subtle white haze to distinguish from night
-        if not night:
-            from PIL import Image as _Img
-            haze = _Img.new("RGBA", img.size, (255, 255, 255, 40))
-            img = img.convert("RGBA")
-            img = _Img.alpha_composite(img, haze).convert("RGB")
+        #if not night:
+        #    from PIL import Image as _Img
+        #    haze = _Img.new("RGBA", img.size, (255, 255, 255, 40))
+        #    img = img.convert("RGBA")
+        #    img = _Img.alpha_composite(img, haze).convert("RGB")
 
         buf = io.BytesIO()
         img.save(buf, format="PNG")
@@ -797,6 +802,100 @@ def png_to_bmp565(png_bytes, width, height):
 # WSGI handler
 # ---------------------------------------------------------------------------
 
+def get_subsolar_point():
+    """Get the lat/lon of the point on Earth directly under the sun."""
+    now = datetime.datetime.utcnow()
+    
+    obs = ephem.Observer()
+    obs.date = now
+    obs.lat = '0'
+    obs.lon = '0'
+    obs.elevation = 0
+    
+    sun = ephem.Sun(obs)
+    
+    # Sun's declination = subsolar latitude
+    lat = math.degrees(sun.dec)
+    
+    # Convert RA to longitude using Greenwich Sidereal Time
+    gst = obs.sidereal_time()  # returns GST in radians as ephem angle
+    lon = math.degrees(sun.ra - gst)
+    lon = (lon + 180) % 360 - 180  # normalize to -180..180
+    
+    return lat, lon
+
+
+def add_night_overlay(image, darkness):
+    """
+    Overlay a night-side darkening on a world map image.
+    
+    Args:
+        image: PIL Image of the world map (equirectangular projection)
+        darkness: 0.0 = no darkening, 1.0 = fully black
+    
+    Returns:
+        New PIL Image with night side darkened
+    """
+    from PIL import Image as _PI, ImageDraw as _PID, ImageFilter
+    
+    width, height = image.size
+
+    # Get subsolar point
+    sun_lat, sun_lon = get_subsolar_point()
+    print(f"Subsolar point: lat={sun_lat:.2f}, lon={sun_lon:.2f}")
+    sun_lat_r = math.radians(sun_lat)
+    sun_lon_r = math.radians(sun_lon)
+
+    # --- Vectorized day/night mask ---
+    lons = np.linspace(-180, 180, width, endpoint=False)
+    lats = np.linspace(90, -90, height, endpoint=False)
+    lon_grid, lat_grid = np.meshgrid(np.radians(lons), np.radians(lats))
+
+    cos_angle = (
+        math.sin(sun_lat_r) * np.sin(lat_grid) +
+        math.cos(sun_lat_r) * np.cos(lat_grid) * np.cos(lon_grid - sun_lon_r)
+    )
+
+    # 0=night, 255=day — use cos_angle clipped and scaled for smooth twilight band
+    mask_array = np.clip(cos_angle * 255 / 0.1, 0, 255).astype(np.uint8)
+    # The 0.1 factor controls the width of the twilight transition band
+
+    # Blur terminator edge for a soft transition
+    mask = _PI.fromarray(mask_array)
+    mask = mask.filter(ImageFilter.GaussianBlur(radius=width // 100))
+    mask_array = np.array(mask, dtype=np.float32) / 255.0  # range 0.0 (night) to 1.0 (day)
+
+    # Save debug mask
+    # _PI.fromarray((mask_array * 255).astype(np.uint8)).save("debug_mask.png")
+
+    # --- Compositing: darken night side ---
+    result_array = np.array(image.convert("RGB"), dtype=np.float32)
+
+    # alpha: 0.0 = full day (no darkening), darkness = full night
+    alpha = (1.0 - mask_array) * darkness  # shape (H, W)
+
+    # Apply darkening with a slight blue night tint
+    result_array[:, :, 0] = np.clip(result_array[:, :, 0] * (1.0 - alpha),        0, 255)  # R
+    result_array[:, :, 1] = np.clip(result_array[:, :, 1] * (1.0 - alpha),        0, 255)  # G
+    result_array[:, :, 2] = np.clip(result_array[:, :, 2] * (1.0 - alpha * 0.7),  0, 255)  # B (darken less for blue tint)
+
+    return _PI.fromarray(result_array.astype(np.uint8))
+
+    
+def process_map_with_night(bytebuf, darkness: float = 0.5):
+    from PIL import Image as _PI
+    # Load image from input buffer
+    buf = io.BytesIO(bytebuf)
+    img = _PI.open(buf)
+    
+    # Apply night overlay
+    result = add_night_overlay(img, darkness=darkness)
+    
+    # Save result to a new BytesIO buffer   
+    out_buf = io.BytesIO()
+    result.save(out_buf, format="PNG")
+    out_buf.seek(0)
+    return out_buf.read()
 # ---------------------------------------------------------------------------
 # Server-side BMP pair cache
 # ---------------------------------------------------------------------------
@@ -882,12 +981,12 @@ def handle_area_request(params, start_response, environ={}):
             log.info("TIMING interp: %.2fs", _time.time()-t2); t3=_time.time()
             png_day   = render_map(vg_data, txlat, txlng, mhz, utc, ssn,
                                    month, year, mode_label, width, height,
-                                   night=False, map_type=map_type, _precomputed=precomputed)
+                                   map_type=map_type, _precomputed=precomputed)
             log.info("TIMING render_day: %.2fs", _time.time()-t3); t4=_time.time()
-            png_night = render_map(vg_data, txlat, txlng, mhz, utc, ssn,
-                                   month, year, mode_label, width, height,
-                                   night=True,  map_type=map_type, _precomputed=precomputed)
-            log.info("TIMING render_night: %.2fs", _time.time()-t4); t4=_time.time()
+            png_night = process_map_with_night(png_day, darkness=0.5)
+                                                                          
+                                                                                                                          
+            log.info("TIMING convert night: %.2fs", _time.time()-t4); t4=_time.time()
         else:
             png_day = png_night = _blank_png(width, height)
             t4 = _time.time()
