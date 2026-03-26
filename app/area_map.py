@@ -450,10 +450,7 @@ def parse_voacap_line(line):
 #   lat (degrees float)
 #   lon (degrees float)
 #   REL (0.0-1.0 float)
-                                                                                                        
-                                                                   
-                                                            
-                                                  
+
 # Skip lines where x and y are not integers (header/label lines).
                                                                                    
 # ---------------------------------------------------------------------------
@@ -463,14 +460,6 @@ def parse_vg1(vg1_path):
     Parse VG1 text output. Extracts REL (field 16) and ANGLE/TOA (field 6).
     Returns dict {"raw": [(lat, lon, rel, angle), ...]} or None.
     """
-             
-                                                                                   
-                                                                                   
-                                             
-
-                         
-                                                                       
-
     raw = []
 #    lineno = 0
     try:
