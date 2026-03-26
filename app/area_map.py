@@ -1075,8 +1075,8 @@ def handle_area_request(params, start_response, environ={}):
             png_day = png_night = _blank_png(width, height)
             t4 = _time.time()
     finally:
-        log.info("temp directory is %s",tmp_dir)
-        #shutil.rmtree(tmp_dir, ignore_errors=True)
+        #log.info("temp directory is %s",tmp_dir)
+        shutil.rmtree(tmp_dir, ignore_errors=True)
                                              
 
     bmp_day   = png_to_bmp565(png_day,   width, height)
