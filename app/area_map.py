@@ -8,14 +8,7 @@ See LICENSE file or <https://www.gnu.org/licenses/agpl-3.0.html>
 Pipeline:
   1. Build DA1 deck from request params (based on shipped voaareax.da1 sample)
   2. Write to itshfbc/run/voaareax.da1, run: voacapl <dir> area calc default
-  3. Parse VG1 text output by splitting whitespace:
-       field[0] = lon_idx (1-based)
-       field[1] = lat_idx (1-based)
-       field[2] = lat (degrees)
-       field[3] = lon (degrees)
-       field[9] = REL (0.0-1.0)
-     Skip lines containing any letter (headers/mode strings)
-     Note: fixed-column parsing fails because negative coords merge e.g. -53.8-163.0
+  3. Parse VG1 text output by extracting substrings
   4. Render with matplotlib+cartopy (Agg backend, no display)
      pcolormesh on PlateCarree, portland colormap, coastlines
   5. Return PNG bytes
@@ -44,6 +37,11 @@ import uuid
 import logging
 
 import numpy as np
+
+import datetime
+import ephem
+
+from PIL import Image as _PI, ImageDraw as _PID, ImageFilter
 
 log = logging.getLogger("voacap_service.area_map")
 
@@ -160,18 +158,84 @@ TOA_COLORS = [
 ]
 TOA_MAX = 30.0  # degrees
 
-# VG1 field indices -- full format (METHOD 130 with frequency)
-VG1_LAT        = 2
-VG1_LON        = 3
-VG1_MUF        = 4   # MUF (MHz)
-VG1_ANGLE      = 6   # TOA / take-off angle (degrees)
-VG1_REL        = 16  # REL in full format
-VG1_MIN_FULL   = 17  # minimum fields for full format
+# ---------------------------------------------------------------------------
+# VG1 processing 
+# ---------------------------------------------------------------------------
+VG1_FIELD_X   = 'x'
+VG1_FIELD_Y   = 'y'
+VG1_FIELD_LAT  = 'lat'
+VG1_FIELD_LON  = 'lon'
+VG1_FIELD_REL  = 'rel'
+VG1_FIELD_MUF  = 'muf'
+VG1_FIELD_ANGLE= 'angle'
 
-# VG1 field indices -- short format (MUF-only run, MHZ=0)
-VG1S_MUF   = 4
-VG1S_REL   = 8
-VG1S_MIN   = 9   # minimum fields for short format
+# Sample long format line 
+#0                                                                                                   1                                                                      
+#0         1         2         3         4         5         6         7         8         9         0         1         2         3         4         5         6         7
+#012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890
+#VOACAPL Version 16.1207I
+#OHB OHB [ISOTROPE ] 100W 0deg 14ut 0Freqs Mar 104ssn
+# 37 37  Latitude Longitude   MUF  MODE ANGLE DELAY VHITE MUFda  LOSS   DBU  SDBW  NDBW   SNR RPWRG   REL MPROB SPROB TGAIN RGAIN SNRxx    DU    DL SIGLW SIGUP PWRCTANGLER
+#  1  1   25.0278  131.8172 13.80  F2F2 14.00 41.27 307.5 1.000 167.1 -28.7-147.1-140.4  -6.7  36.2 0.014 0.000 0.066  0.00  0.00 -23.5 10.90  9.87 12.82  5.36 0.000 18.00
+
+FIELDS = [
+    (VG1_FIELD_X,    0,   3),
+    (VG1_FIELD_Y,    3,   6),
+    (VG1_FIELD_LAT,  6,  15),
+    (VG1_FIELD_LON, 16,  26),
+    (VG1_FIELD_MUF,   26,  32),
+    #('mode',  32,  39),
+    (VG1_FIELD_ANGLE, 38,  44),
+    #('delay', 44,  50),
+    #('vhite', 50,  56),
+    #('muf',   56,  60),
+    #('da',    60,  62),
+    #('loss',  62,  68),
+    #('dbu',   68,  74),
+    #('sdbw',  74,  80),
+    #('ndbw',  80,  86),
+    #('snr',   86,  92),
+    #('rpwrg', 92,  98),
+    (VG1_FIELD_REL,   98, 104),
+    #('mprob',104, 110),
+    #('sprob',110, 116),
+    #('tgain',116, 122),
+    #('rgain',122, 128),
+    #('snrxx',128, 134),
+    #('du',   134, 140),
+    #('dl',   140, 146),
+    #('siglw',146, 152),
+    #('sigup',152, 158),
+    #('pwrct',158, 164),
+    #('angler',164,170),
+]
+
+#
+# Exmaple short header
+#                                                                           
+#0         1         2         3         4         5         6        
+#012345678901234567890123456789012345678901234567890123456789012345678
+#VOACAPL Version 16.1207I
+#OHB OHB [ISOTROPE ] 100W 0deg 14ut 0Freqs Mar 104ssn
+# 37 37  Latitude Longitude   MUF   DBU  SDBW   SNR   REL SPROB SNRxx
+#  1  1   25.0278  131.8172 15.38   0.0   0.0   0.0 0.000 0.000   0.0
+
+VG1_SHORT_LEN = 68
+FIELDS_SHORT = [
+    (VG1_FIELD_X,    0,   3),
+    (VG1_FIELD_Y,    3,   6),
+    (VG1_FIELD_LAT,  6,  16),
+    (VG1_FIELD_LON, 16,  26),
+    (VG1_FIELD_MUF, 26,  32),
+    #('dbu',         32,  38),
+    #('sdbw',        38,  44),
+    #('snr',         44,  50),
+    (VG1_FIELD_REL,  50,  56),
+    #('sprob',       56,  62),    
+    #('snrxx', 62,  67),    
+]
+
+VG1_DATA_START=4
 
 # MUF colormap -- 0-35 MHz
 MUF_COLORS = [
@@ -366,21 +430,32 @@ def run_voaarea(deck):
     return vg1, tmp_dir
 
 # ---------------------------------------------------------------------------
+# VG1 line parser
+# ---------------------------------------------------------------------------
+
+def parse_voacap_line(line):
+    if len(line) > VG1_SHORT_LEN+2:    #include cr/lf
+        record = {name: line[start:end].strip() for name, start, end in FIELDS}
+    else:
+        record = {name: line[start:end].strip() for name, start, end in FIELDS_SHORT}
+    return record
+    
+# ---------------------------------------------------------------------------
 # VG1 parser
 #
-# Split on whitespace -- fixed columns fail due to merged negative numbers.
+# VG1 parsing uses parse_voacap_lines to create a hash of fields based on fixes substrings
 # Field indices (confirmed by bisection on live container output):
-#   [0]  lon_idx  (1-based integer)
-#   [1]  lat_idx  (1-based integer)
-#   [2]  lat      (degrees float)
-#   [3]  lon      (degrees float)
-#   [9]  REL      (0.0-1.0 float)
-# Field indices confirmed from VG1 header line:
-# [0]=lon_idx [1]=lat_idx [2]=lat [3]=lon [4]=MUF [5]=MODE(letters)
-# [6]=ANGLE [7]=DELAY [8]=VHITE [9]=MUFda [10]=LOSS [11]=DBU
-# [12]=SDBW [13]=NDBW [14]=SNR [15]=RPWRG [16]=REL
-# Skip lines where field[0] is not an integer (header/label lines).
-# Do NOT filter on letter presence -- MODE field e.g. "F1F2" is on every data line.
+#    x  (1-based integer)
+#    y  (1-based integer)
+#   lat (degrees float)
+#   lon (degrees float)
+#   REL (0.0-1.0 float)
+                                                                                                        
+                                                                   
+                                                            
+                                                  
+# Skip lines where x and y are not integers (header/label lines).
+                                                                                   
 # ---------------------------------------------------------------------------
 
 def parse_vg1(vg1_path):
@@ -388,38 +463,41 @@ def parse_vg1(vg1_path):
     Parse VG1 text output. Extracts REL (field 16) and ANGLE/TOA (field 6).
     Returns dict {"raw": [(lat, lon, rel, angle), ...]} or None.
     """
-    import re
-    # Fortran fixed-width output merges adjacent negative numbers e.g. "-4.7-136.2"
-    # Split on sign boundaries: insert space before '-' that follows a digit or '.'
-    _split_neg = re.compile(r'(?<=[\d.])(-)')
+             
+                                                                                   
+                                                                                   
+                                             
 
-    def split_line(line):
-        return _split_neg.sub(lambda m: ' ' + m.group(1), line).split()
+                         
+                                                                       
 
     raw = []
+#    lineno = 0
     try:
         with open(vg1_path, errors="replace") as f:
             for line in f:
-                parts = split_line(line)
-                if len(parts) < VG1S_MIN:
-                    continue
+#                lineno = lineno+1
+#                if lineno < VG1_DATA_START:
+#                    continue
+                fields = parse_voacap_line(line)
                 try:
-                    int(parts[0])   # lon_idx -- fails on header lines
-                    int(parts[1])   # lat_idx
-                    lat = float(parts[VG1_LAT])
-                    lon = float(parts[VG1_LON])
-                    if len(parts) >= VG1_MIN_FULL:
-                        # Full format: has ANGLE, REL at [16]
-                        rel   = float(parts[VG1_REL])
-                        angle = float(parts[VG1_ANGLE])
-                        muf   = float(parts[VG1_MUF])
-                    elif len(parts) >= VG1S_MIN:
-                        # Short format: MUF-only run (MHZ=0), no ANGLE
-                        rel   = float(parts[VG1S_REL])
+                    int(fields[VG1_FIELD_X])   # grid x -- fails on header lines
+                    int(fields[VG1_FIELD_Y])   # grid y -- fails on header lines
+                    lat = float(fields[VG1_FIELD_LAT])
+                    lon = float(fields[VG1_FIELD_LON])
+                                                  
+                                                             
+                    rel = float(fields[VG1_FIELD_REL])
+                    muf = float(fields[VG1_FIELD_MUF])                    
+                    if len(line) <= VG1_SHORT_LEN+2:   # include cr/lf
+                                                
+                                                                      
+                                                      
                         angle = 0.0
-                        muf   = float(parts[VG1S_MUF])
+                                                      
                     else:
-                        continue
+                        angle = float(fields[VG1_FIELD_ANGLE])
+
                     if lon > 180.0:
                         lon -= 360.0
                     raw.append((lat, lon, rel, angle, muf))
@@ -631,7 +709,7 @@ def _draw_geom_lines(draw, geom, width, height, color, line_width=1):
 
 
 def render_map(vg_data, txlat, txlng, mhz, utc, ssn, month, year,
-               mode_label, width, height, night=False, map_type="REL",
+               mode_label, width, height, map_type="REL",
                _precomputed=None):
     """
     Render coverage map using PIL (fast). Returns PNG bytes.
@@ -686,11 +764,11 @@ def render_map(vg_data, txlat, txlng, mhz, utc, ssn, month, year,
         draw.ellipse([tx_x-r, tx_y-r, tx_x+r, tx_y+r], outline=(255, 0, 0), width=2)
 
         # Day map: add subtle white haze to distinguish from night
-        if not night:
-            from PIL import Image as _Img
-            haze = _Img.new("RGBA", img.size, (255, 255, 255, 40))
-            img = img.convert("RGBA")
-            img = _Img.alpha_composite(img, haze).convert("RGB")
+        #if not night:
+        #    from PIL import Image as _Img
+        #    haze = _Img.new("RGBA", img.size, (255, 255, 255, 40))
+        #    img = img.convert("RGBA")
+        #    img = _Img.alpha_composite(img, haze).convert("RGB")
 
         buf = io.BytesIO()
         img.save(buf, format="PNG")
@@ -797,6 +875,101 @@ def png_to_bmp565(png_bytes, width, height):
 # WSGI handler
 # ---------------------------------------------------------------------------
 
+def get_subsolar_point():
+    """Get the lat/lon of the point on Earth directly under the sun."""
+    now = datetime.datetime.utcnow()
+    
+    obs = ephem.Observer()
+    obs.date = now
+    obs.lat = '0'
+    obs.lon = '0'
+    obs.elevation = 0
+    
+    sun = ephem.Sun(obs)
+    
+    # Sun's declination = subsolar latitude
+    lat = math.degrees(sun.dec)
+    
+    # Convert RA to longitude using Greenwich Sidereal Time
+    gst = obs.sidereal_time()  # returns GST in radians as ephem angle
+    lon = math.degrees(sun.ra - gst)
+    lon = (lon + 180) % 360 - 180  # normalize to -180..180
+    
+    return lat, lon
+
+
+def add_night_overlay(image, darkness):
+    """
+    Overlay a night-side darkening on a world map image.
+    
+    Args:
+        image: PIL Image of the world map (equirectangular projection)
+        darkness: 0.0 = no darkening, 1.0 = fully black
+    
+    Returns:
+        New PIL Image with night side darkened
+    """
+    from PIL import Image as _PI, ImageDraw as _PID, ImageFilter
+    
+    width, height = image.size
+
+    # Get subsolar point
+    sun_lat, sun_lon = get_subsolar_point()
+    print(f"Subsolar point: lat={sun_lat:.2f}, lon={sun_lon:.2f}")
+    sun_lat_r = math.radians(sun_lat)
+    sun_lon_r = math.radians(sun_lon)
+
+    # --- Vectorized day/night mask ---
+    lons = np.linspace(-180, 180, width, endpoint=False)
+    lats = np.linspace(90, -90, height, endpoint=False)
+    lon_grid, lat_grid = np.meshgrid(np.radians(lons), np.radians(lats))
+
+    cos_angle = (
+        math.sin(sun_lat_r) * np.sin(lat_grid) +
+        math.cos(sun_lat_r) * np.cos(lat_grid) * np.cos(lon_grid - sun_lon_r)
+    )
+
+    # 0=night, 255=day — use cos_angle clipped and scaled for smooth twilight band
+    mask_array = np.clip(cos_angle * 255 / 0.1, 0, 255).astype(np.uint8)
+    # The 0.1 factor controls the width of the twilight transition band
+
+    # Blur terminator edge for a soft transition
+    mask = _PI.fromarray(mask_array)
+    mask = mask.filter(ImageFilter.GaussianBlur(radius=width // 100))
+    mask_array = np.array(mask, dtype=np.float32) / 255.0  # range 0.0 (night) to 1.0 (day)
+
+    # Save debug mask
+    # _PI.fromarray((mask_array * 255).astype(np.uint8)).save("debug_mask.png")
+
+    # --- Compositing: darken night side ---
+    result_array = np.array(image.convert("RGB"), dtype=np.float32)
+
+    # alpha: 0.0 = full day (no darkening), darkness = full night
+    alpha = (1.0 - mask_array) * darkness  # shape (H, W)
+
+    # Apply darkening with a slight blue night tint
+    result_array[:, :, 0] = np.clip(result_array[:, :, 0] * (1.0 - alpha),        0, 255)  # R
+    result_array[:, :, 1] = np.clip(result_array[:, :, 1] * (1.0 - alpha),        0, 255)  # G
+    result_array[:, :, 2] = np.clip(result_array[:, :, 2] * (1.0 - alpha * 0.7),  0, 255)  # B (darken less for blue tint)
+
+    return _PI.fromarray(result_array.astype(np.uint8))
+
+    
+def process_map_with_night(bytebuf, darkness: float = 0.5):
+    from PIL import Image as _PI
+    # Load image from input buffer
+    buf = io.BytesIO(bytebuf)
+    img = _PI.open(buf)    
+    
+    # Apply night overlay
+    result = add_night_overlay(img, darkness=darkness)
+    
+    # Save result to a new BytesIO buffer   
+    out_buf = io.BytesIO()
+    result.save(out_buf, format="PNG")
+    out_buf.seek(0)
+    return out_buf.read()
+    
 # ---------------------------------------------------------------------------
 # Server-side BMP pair cache
 # ---------------------------------------------------------------------------
@@ -882,17 +1055,19 @@ def handle_area_request(params, start_response, environ={}):
             log.info("TIMING interp: %.2fs", _time.time()-t2); t3=_time.time()
             png_day   = render_map(vg_data, txlat, txlng, mhz, utc, ssn,
                                    month, year, mode_label, width, height,
-                                   night=False, map_type=map_type, _precomputed=precomputed)
+                                   map_type=map_type, _precomputed=precomputed)
             log.info("TIMING render_day: %.2fs", _time.time()-t3); t4=_time.time()
-            png_night = render_map(vg_data, txlat, txlng, mhz, utc, ssn,
-                                   month, year, mode_label, width, height,
-                                   night=True,  map_type=map_type, _precomputed=precomputed)
-            log.info("TIMING render_night: %.2fs", _time.time()-t4); t4=_time.time()
+            png_night = process_map_with_night(png_day, darkness=0.5)
+                                                                          
+                                                                                                                          
+            log.info("TIMING convert night: %.2fs", _time.time()-t4); t4=_time.time()
         else:
             png_day = png_night = _blank_png(width, height)
             t4 = _time.time()
     finally:
+        #log.info("temp directory is %s",tmp_dir)
         shutil.rmtree(tmp_dir, ignore_errors=True)
+                                             
 
     bmp_day   = png_to_bmp565(png_day,   width, height)
     bmp_night = png_to_bmp565(png_night, width, height)
