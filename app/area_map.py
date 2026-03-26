@@ -461,7 +461,7 @@ def parse_voacap_line(line):
 #   lat (degrees float)
 #   lon (degrees float)
 #   REL (0.0-1.0 float)
-                                               
+                                                                                                        
                                                                    
                                                             
                                                   
@@ -970,7 +970,7 @@ def process_map_with_night(bytebuf, darkness: float = 0.5):
     from PIL import Image as _PI
     # Load image from input buffer
     buf = io.BytesIO(bytebuf)
-    img = _PI.open(buf)
+    img = _PI.open(buf)    
     
     # Apply night overlay
     result = add_night_overlay(img, darkness=darkness)
@@ -980,6 +980,7 @@ def process_map_with_night(bytebuf, darkness: float = 0.5):
     result.save(out_buf, format="PNG")
     out_buf.seek(0)
     return out_buf.read()
+    
 # ---------------------------------------------------------------------------
 # Server-side BMP pair cache
 # ---------------------------------------------------------------------------
