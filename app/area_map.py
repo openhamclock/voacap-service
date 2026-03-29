@@ -322,7 +322,7 @@ def build_area_deck(year, month, utc, txlat, txlng,
         comment1 + "\n"
         "COMMENT       0    4   -1   -1    1    0 receive.cty\n"
         "COMMENT     {txlat:07.3f}  {txlng:08.3f} OHB                    0.0 {path_word}\n"
-        "AREA        {txlat:07.3f}  {txlng:08.3f}  -20000.00  20000.00 -20000.00  20000.00   37   37    0\n"
+        "AREA        {txlat:07.3f}  {txlng:08.3f}  -20000.00  20000.00 -20000.00  20000.00  180   90    0\n"
         "COMMENT   Parameters:    4\n"
         "COMMENT   MUF      0\n"
         "COMMENT   DBU      0\n"
@@ -338,7 +338,7 @@ def build_area_deck(year, month, utc, txlat, txlng,
         "LABEL     OHB   OHB\n"
         "CIRCUIT   {lat_str:<6s}  {lon_str:>8s}    {lat_str:<6s}  {lon_str:>8s}  {path_ch}     0\n"
         "SYSTEM     {fp} 145. {ta}  90. {rn} 3.00 0.00\n"
-        "FPROB      0.00 0.00 0.00 0.00\n"
+        "FPROB      1.00 1.00 1.00 0.00\n"
         "ANTENNA       1    1    2   30     0.000[default/isotrope     ]  0.0  {pow_kw}\n"
         "ANTENNA       2    2    2   30     0.000[default/isotrope     ]  0.0    0.0000\n"
         "METHOD      130    0\n"
@@ -762,11 +762,11 @@ def render_map(vg_data, txlat, txlng, mhz, utc, ssn, month, year,
         buf = io.BytesIO()
         img.save(buf, format="PNG")
         buf.seek(0)
-        return buf.read()
+        return buf.read(), img
 
     except Exception as e:
         log.exception("render_map error: %s", e)
-        return _blank_png(width, height)
+        return _blank_png(width, height), None
 
 
 def _blank_png(width, height):
@@ -886,7 +886,6 @@ def get_subsolar_point():
     
     return lat, lon
 
-
 def add_night_overlay(image, darkness):
     """
     Overlay a night-side darkening on a world map image.
@@ -899,60 +898,77 @@ def add_night_overlay(image, darkness):
         New PIL Image with night side darkened
     """
     from PIL import Image as _PI, ImageDraw as _PID, ImageFilter
+    import time as _time
+    from scipy.ndimage import gaussian_filter
     
     width, height = image.size
-
+    t0 = _time.time()
     # Get subsolar point
     sun_lat, sun_lon = get_subsolar_point()
     print(f"Subsolar point: lat={sun_lat:.2f}, lon={sun_lon:.2f}")
     sun_lat_r = math.radians(sun_lat)
     sun_lon_r = math.radians(sun_lon)
-
+    # --- Work at reduced reslution then upscale
+    scale = 4
+    w2, h2 = width // scale, height // scale
     # --- Vectorized day/night mask ---
-    lons = np.linspace(-180, 180, width, endpoint=False)
-    lats = np.linspace(90, -90, height, endpoint=False)
-    lon_grid, lat_grid = np.meshgrid(np.radians(lons), np.radians(lats))
-
+    lons = np.linspace(-math.pi, math.pi, w2, endpoint=False, dtype=np.float32)
+    lats = np.linspace(math.pi/2, -math.pi/2, h2, endpoint=False, dtype=np.float32)
+    lon_grid, lat_grid = np.meshgrid(lons, lats)    
+    log.info("TIMING lat/lon meshgrid: %.2fs", _time.time()-t0); t1=_time.time() 
+    # Precompute constants
+    sin_sun = math.sin(sun_lat_r)
+    cos_sun = math.cos(sun_lat_r)    
+    # Vectorized cos_angle
     cos_angle = (
-        math.sin(sun_lat_r) * np.sin(lat_grid) +
-        math.cos(sun_lat_r) * np.cos(lat_grid) * np.cos(lon_grid - sun_lon_r)
+        sin_sun * np.sin(lat_grid) +
+        cos_sun * np.cos(lat_grid) * np.cos(lon_grid - sun_lon_r)
     )
+    log.info("TIMING cos_angle: %.2fs", _time.time() - t1); t2 = _time.time()
+    # Build float mask at reduced resolution — skip uint8 intermediate
+    mask_small = np.clip(cos_angle / 0.1, 0.0, 1.0, dtype=np.float32)
 
-    # 0=night, 255=day — use cos_angle clipped and scaled for smooth twilight band
-    mask_array = np.clip(cos_angle * 255 / 0.1, 0, 255).astype(np.uint8)
-    # The 0.1 factor controls the width of the twilight transition band
+    # Blur at small size (much faster), stay in float
+    mask_small = gaussian_filter(mask_small, sigma=max(1, w2 // 100))
+    log.info("TIMING blur: %.2fs", _time.time() - t2); t3 = _time.time()
 
-    # Blur terminator edge for a soft transition
-    mask = _PI.fromarray(mask_array)
-    mask = mask.filter(ImageFilter.GaussianBlur(radius=width // 100))
-    mask_array = np.array(mask, dtype=np.float32) / 255.0  # range 0.0 (night) to 1.0 (day)
+    # Upscale mask to full resolution via PIL BILINEAR
+    mask_img = _PI.fromarray((mask_small * 255).astype(np.uint8))
+    mask_array = np.asarray(
+        mask_img.resize((width, height), _PI.BILINEAR), dtype=np.float32
+    ) / 255.0  # shape (H, W), range 0.0 (night) to 1.0 (day)
+    log.info("TIMING upscale: %.2fs", _time.time() - t3); t4 = _time.time()
 
-    # Save debug mask
-    # _PI.fromarray((mask_array * 255).astype(np.uint8)).save("debug_mask.png")
-
-    # --- Compositing: darken night side ---
-    result_array = np.array(image.convert("RGB"), dtype=np.float32)
-
-    # alpha: 0.0 = full day (no darkening), darkness = full night
+    # Alpha map: 0.0 = full day (no darkening), darkness = full night
     alpha = (1.0 - mask_array) * darkness  # shape (H, W)
 
-    # Apply darkening with a slight blue night tint
-    result_array[:, :, 0] = np.clip(result_array[:, :, 0] * (1.0 - alpha),        0, 255)  # R
-    result_array[:, :, 1] = np.clip(result_array[:, :, 1] * (1.0 - alpha),        0, 255)  # G
-    result_array[:, :, 2] = np.clip(result_array[:, :, 2] * (1.0 - alpha * 0.7),  0, 255)  # B (darken less for blue tint)
+    # Convert image to float32 — single copy via astype
+    result_array = np.asarray(image.convert("RGB")).astype(np.float32)
+    log.info("TIMING convert: %.2fs", _time.time() - t4); t5 = _time.time()
 
+    # Build scale array in-place to avoid np.stack allocation
+    scale3 = np.empty((height, width, 3), dtype=np.float32)
+    scale3[:, :, 0] = 1.0 - alpha          # R
+    scale3[:, :, 1] = 1.0 - alpha          # G
+    scale3[:, :, 2] = 1.0 - alpha * 0.7    # B (darken less for blue tint)
+
+    # Apply darkening in-place
+    np.multiply(result_array, scale3, out=result_array)
+    np.clip(result_array, 0, 255, out=result_array)
+    log.info("TIMING darken: %.2fs", _time.time() - t5); t6 = _time.time()
+
+    log.info("TIMING total: %.2fs", _time.time() - t0)     
     return _PI.fromarray(result_array.astype(np.uint8))
 
     
-def process_map_with_night(bytebuf, darkness: float = 0.5):
-    from PIL import Image as _PI
-    # Load image from input buffer
-    buf = io.BytesIO(bytebuf)
-    img = _PI.open(buf)    
-    
+def process_map_with_night(img, darkness: float = 0.5):
+    from PIL import Image as _PI  
+    import time as _time
+
+    t0 = _time.time()
     # Apply night overlay
     result = add_night_overlay(img, darkness=darkness)
-    
+    log.info("TIMING adding night overlay: %.2fs", _time.time()-t0); t1=_time.time()   
     # Save result to a new BytesIO buffer   
     out_buf = io.BytesIO()
     result.save(out_buf, format="PNG")
@@ -1042,11 +1058,11 @@ def handle_area_request(params, start_response, environ={}):
         if vg_data:
             precomputed = interpolate_grid(vg_data, map_type)
             log.info("TIMING interp: %.2fs", _time.time()-t2); t3=_time.time()
-            png_day   = render_map(vg_data, txlat, txlng, mhz, utc, ssn,
+            png_day,img_day = render_map(vg_data, txlat, txlng, mhz, utc, ssn,
                                    month, year, mode_label, width, height,
                                    map_type=map_type, _precomputed=precomputed)
             log.info("TIMING render_day: %.2fs", _time.time()-t3); t4=_time.time()
-            png_night = process_map_with_night(png_day, darkness=0.5)
+            png_night = process_map_with_night(img_day, darkness=0.5)
                                                                           
                                                                                                                           
             log.info("TIMING convert night: %.2fs", _time.time()-t4); t4=_time.time()
