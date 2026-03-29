@@ -899,6 +899,7 @@ def add_night_overlay(image, darkness):
     """
     from PIL import Image as _PI, ImageDraw as _PID, ImageFilter
     import time as _time
+    from scipy.ndimage import gaussian_filter
     
     width, height = image.size
     t0 = _time.time()
@@ -923,27 +924,40 @@ def add_night_overlay(image, darkness):
         sin_sun * np.sin(lat_grid) +
         cos_sun * np.cos(lat_grid) * np.cos(lon_grid - sun_lon_r)
     )
-    # Build mask at reduced resolution
-    mask_small = np.clip(cos_angle * (255 / 0.1), 0, 255).astype(np.uint8)
-    log.info("TIMING build mask: %.2fs", _time.time()-t1); t2=_time.time() 
-    # Blur at small size (much faster), then upscale
-    mask_img = _PI.fromarray(mask_small)
-    mask_img = mask_img.filter(ImageFilter.GaussianBlur(radius=max(1, w2 // 100)))
-    mask_img = mask_img.resize((width, height), _PI.BILINEAR)
-    log.info("TIMING blur resize: %.2fs", _time.time()-t2); t3=_time.time() 
-    # Convert mask to float32 alpha
-    mask_array = np.frombuffer(mask_img.tobytes(), dtype=np.uint8)
-    mask_array = mask_array.reshape(height, width).astype(np.float32) / 255.0
-    log.info("TIMING reshape: %.2fs", _time.time()-t3); t4=_time.time() 
-    # Alpha map — broadcast across channels
+    log.info("TIMING cos_angle: %.2fs", _time.time() - t1); t2 = _time.time()
+    # Build float mask at reduced resolution — skip uint8 intermediate
+    mask_small = np.clip(cos_angle / 0.1, 0.0, 1.0, dtype=np.float32)
+
+    # Blur at small size (much faster), stay in float
+    mask_small = gaussian_filter(mask_small, sigma=max(1, w2 // 100))
+    log.info("TIMING blur: %.2fs", _time.time() - t2); t3 = _time.time()
+
+    # Upscale mask to full resolution via PIL BILINEAR
+    mask_img = _PI.fromarray((mask_small * 255).astype(np.uint8))
+    mask_array = np.asarray(
+        mask_img.resize((width, height), _PI.BILINEAR), dtype=np.float32
+    ) / 255.0  # shape (H, W), range 0.0 (night) to 1.0 (day)
+    log.info("TIMING upscale: %.2fs", _time.time() - t3); t4 = _time.time()
+
+    # Alpha map: 0.0 = full day (no darkening), darkness = full night
     alpha = (1.0 - mask_array) * darkness  # shape (H, W)
-    # Convert image to numpy uint8 first, then to float32
-    result_array = np.array(image.convert("RGB"), dtype=np.float32)
-    log.info("TIMING convert: %.2fs", _time.time()-t4); t5=_time.time() 
-    # Apply darkening — stack alpha for broadcasting across all 3 channels
-    alpha3 = np.stack([alpha, alpha, alpha * 0.7], axis=2)  # blue darkens less
-    result_array = np.clip(result_array * (1.0 - alpha3), 0, 255)
-    log.info("TIMING clip in darkening: %.2fs", _time.time()-t5); t6=_time.time()     
+
+    # Convert image to float32 — single copy via astype
+    result_array = np.asarray(image.convert("RGB")).astype(np.float32)
+    log.info("TIMING convert: %.2fs", _time.time() - t4); t5 = _time.time()
+
+    # Build scale array in-place to avoid np.stack allocation
+    scale3 = np.empty((height, width, 3), dtype=np.float32)
+    scale3[:, :, 0] = 1.0 - alpha          # R
+    scale3[:, :, 1] = 1.0 - alpha          # G
+    scale3[:, :, 2] = 1.0 - alpha * 0.7    # B (darken less for blue tint)
+
+    # Apply darkening in-place
+    np.multiply(result_array, scale3, out=result_array)
+    np.clip(result_array, 0, 255, out=result_array)
+    log.info("TIMING darken: %.2fs", _time.time() - t5); t6 = _time.time()
+
+    log.info("TIMING total: %.2fs", _time.time() - t0)     
     return _PI.fromarray(result_array.astype(np.uint8))
 
     
