@@ -925,35 +925,28 @@ def add_night_overlay(image, darkness):
         cos_sun * np.cos(lat_grid) * np.cos(lon_grid - sun_lon_r)
     )
     log.info("TIMING cos_angle: %.2fs", _time.time() - t1); t2 = _time.time()
-    # Build float mask at reduced resolution — skip uint8 intermediate
-    mask_small = np.clip(cos_angle / 0.1, 0.0, 1.0, dtype=np.float32)
-
-    # Blur at small size (much faster), stay in float
-    mask_small = gaussian_filter(mask_small, sigma=max(1, w2 // 100))
+    mask_u8 = np.clip(cos_angle / 0.1 * 255, 0, 255).astype(np.uint8)
+    mask_u8 = gaussian_filter(mask_u8, sigma=max(1, w2 // 100))
+    mask_small = mask_u8.astype(np.float32) / 255.0   # one conversion, after blur   log.info("TIMING blur: %.2fs", _time.time() - t2); t3 = _time.time()
     log.info("TIMING blur: %.2fs", _time.time() - t2); t3 = _time.time()
-
     # Upscale mask to full resolution via PIL BILINEAR
-    mask_img = _PI.fromarray((mask_small * 255).astype(np.uint8))
-    mask_array = np.asarray(
-        mask_img.resize((width, height), _PI.BILINEAR), dtype=np.float32
-    ) / 255.0  # shape (H, W), range 0.0 (night) to 1.0 (day)
-    log.info("TIMING upscale: %.2fs", _time.time() - t3); t4 = _time.time()
+    from scipy.ndimage import zoom as _zoom
+    zoom_y = height / h2
+    zoom_x = width / w2
+    mask_array = _zoom(mask_small, (zoom_y, zoom_x), order=1)  # bilinear, stays float32    log.info("TIMING upscale: %.2fs", _time.time() - t3); t4 = _time.time()
 
     # Alpha map: 0.0 = full day (no darkening), darkness = full night
     alpha = (1.0 - mask_array) * darkness  # shape (H, W)
-
+    log.info("TIMING upscale: %.2fs", _time.time() - t3); t4 = _time.time()
     # Convert image to float32 — single copy via astype
     result_array = np.asarray(image.convert("RGB")).astype(np.float32)
     log.info("TIMING convert: %.2fs", _time.time() - t4); t5 = _time.time()
 
     # Build scale array in-place to avoid np.stack allocation
-    scale3 = np.empty((height, width, 3), dtype=np.float32)
-    scale3[:, :, 0] = 1.0 - alpha          # R
-    scale3[:, :, 1] = 1.0 - alpha          # G
-    scale3[:, :, 2] = 1.0 - alpha * 0.7    # B (darken less for blue tint)
-
-    # Apply darkening in-place
-    np.multiply(result_array, scale3, out=result_array)
+    day = (1.0 - alpha).astype(np.float32)          # (H, W) — one allocation
+    result_array[:, :, 0] *= day
+    result_array[:, :, 1] *= day
+    result_array[:, :, 2] *= (1.0 - alpha * 0.7)    # blue tint in-place
     np.clip(result_array, 0, 255, out=result_array)
     log.info("TIMING darken: %.2fs", _time.time() - t5); t6 = _time.time()
 
