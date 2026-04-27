@@ -7,9 +7,11 @@ intstandards="$(realpath -s $HERE/../standards)"
 intapp="$(realpath -s $HERE/../../app)"
 echo integration and testing should be done on files included in $intstandards in standards repo before adding to the copies in this repo 
 echo generating code
-$intscripts/insert_license.bash $intstandards/voacap.ant.csv   $intscripts/license_csv.txt  $intbuild/voacap.ant.csv
+$intscripts/insert_license.bash $intstandards/voacap.ant.csv   $intscripts/license_csv.txt  $intbuild/voacap.ant.csv.raw
 $intscripts/insert_license.bash $intstandards/gen_antenna_data.py   $intscripts/license.agpl.kr8x.txt  $intbuild/gen_antenna_data.py
 $intscripts/insert_license.bash $intstandards/antenna_lookup.py   $intscripts/license.agpl.kr8x.txt  $intbuild/antenna_lookup.py
+echo commenting out non-supported voacap files
+python3 $intscripts/patch_csv.py $intbuild/voacap.ant.csv.raw $intscripts/patch_csv.txt $intbuild/voacap.ant.csv
 echo generating voacap antenna_data.py and setting execute permissions
 chmod +x  $intbuild/*py
 python3  $intbuild/gen_antenna_data.py  $intbuild/voacap.ant.csv  $intbuild/antenna_data.py

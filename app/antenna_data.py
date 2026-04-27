@@ -77,7 +77,6 @@ ANTENNA_DATA: list[tuple[int, int, str, str]] = [
     (  4,  46,  'samples/sample.46',  'SDR62/150 :Sample type 46 ITS-78 Sloping Double-Rhomboid'),
     (  4,  47,  'samples/sample.47',  'VM/.25/76/2/120 :Sample type 47 ITS-78 Vertical Monopole + Ground Screen'),
     (  4,  48,  'samples/sample.48',  'INVCONE :Sample type 48 NOSC Inverted Cone antenna'),
-    (  4,  90,  'samples/sample.90',  'IONCAP Rhombic - External type 90 - Terminated Horizontal Rhombic, sample.21'),
     (  4,  99,  'samples/sample.99',  'ISOTROPE :Sample type 99 Harris antenna'),
     (  5,  14,  'samples/sample.14x',  'RH155/40.3/68 :Sample type 14 Point-to-Point gain @ 30 freqs'),
 ]
