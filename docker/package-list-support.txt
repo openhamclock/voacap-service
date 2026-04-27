@@ -1,3 +1,8 @@
+# package-list-support.txt - Build-time dependencies
+#
+# Copyright (C) 2026 Open HamClock Backend (OHB) Contributors
+# License: GNU Affero General Public License v3.0 (AGPLv3)
+# See LICENSE file or <https://www.gnu.org/licenses/agpl-3.0.html>
 # empty lines and lines beginning with a # are ignored. Note that comments within lines are not ignored
 
 autoconf
