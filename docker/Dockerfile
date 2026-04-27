@@ -63,6 +63,8 @@ COPY --from=builder /build/install/usr/local/bin/ /usr/local/bin/
 COPY --from=builder /build/install/usr/local/share/ /usr/local/share/
 COPY app/voacap_service.py /app/voacap_service.py
 COPY app/area_map.py       /app/area_map.py
+COPY app/antenna_data.py   /app/antenna_data.py
+COPY app/antenna_lookup.py /app/antenna_lookup.py
 COPY app/uwsgi.ini         /app/uwsgi.ini
 COPY app/nginx.conf        /app/nginx.conf
 COPY app/entrypoint.sh     /app/entrypoint.sh
