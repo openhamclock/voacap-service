@@ -1,5 +1,8 @@
 # OHB voacap-service Installation
 
+Copyright (C) 2026 Open HamClock Backend (OHB) Contributors  
+License: **AGPLv3** — see [LICENSE](LICENSE)
+
 ## Prerequisites
 - Docker
 - lighttpd with mod_proxy
