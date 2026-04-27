@@ -82,13 +82,13 @@ DEFAULT_HEIGHT = 400
 # ---------------------------------------------------------------------------
 MODE_RSN_BASE = -4.4
 MODE_RSN: dict[int, float] = {
-    3:  MODE_RSN_BASE+ 0.0,   # WSPR     — calibrated based on reference above
-    38: MODE_RSN_BASE+34.0,   # SSB      — calibrated based on reference above
-    13: MODE_RSN_BASE+10.0,   # FT8      — calibrated based on reference above
-    17: MODE_RSN_BASE+14.0,   # FT4      — calibrated based on reference above
-    22: MODE_RSN_BASE+20.0,   # RTTY     — calibrated based on reference above
-    19: MODE_RSN_BASE+17.0,   # CW       — calibrated
-    49: MODE_RSN_BASE+43.0,   # AM       — calibrated based on reference above
+    3:  MODE_RSN_BASE + 0.0,   # WSPR     — calibrated based on reference above
+    38: MODE_RSN_BASE + 34.0,   # SSB      — calibrated based on reference above
+    13: MODE_RSN_BASE + 10.0,   # FT8      — calibrated based on reference above
+    17: MODE_RSN_BASE + 14.0,   # FT4      — calibrated based on reference above
+    22: MODE_RSN_BASE + 20.0,   # RTTY     — calibrated based on reference above
+    19: MODE_RSN_BASE + 17.0,   # CW       — calibrated
+    49: MODE_RSN_BASE + 43.0,   # AM       — calibrated based on reference above
 }
 MODE_RSN_DEFAULT = (MODE_RSN_BASE+17.0)   # fallback for unknown mode codes
 
@@ -161,7 +161,7 @@ TOA_COLORS = [
 TOA_MAX = 30.0  # degrees
 
 # ---------------------------------------------------------------------------
-# VG1 processing 
+# VG1 processing
 # ---------------------------------------------------------------------------
 VG1_FIELD_X   = 'x'
 VG1_FIELD_Y   = 'y'
@@ -169,10 +169,10 @@ VG1_FIELD_LAT  = 'lat'
 VG1_FIELD_LON  = 'lon'
 VG1_FIELD_REL  = 'rel'
 VG1_FIELD_MUF  = 'muf'
-VG1_FIELD_ANGLE= 'angle'
+VG1_FIELD_ANGLE = 'angle'
 
-# Sample long format line 
-#0                                                                                                   1                                                                      
+# Sample long format line
+#0                                                                                                   1
 #0         1         2         3         4         5         6         7         8         9         0         1         2         3         4         5         6         7
 #012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890
 #VOACAPL Version 16.1207I
@@ -214,7 +214,7 @@ FIELDS = [
 
 #
 # Exmaple short header
-#                                                                           
+#
 #0         1         2         3         4         5         6        
 #012345678901234567890123456789012345678901234567890123456789012345678
 #VOACAPL Version 16.1207I
@@ -233,11 +233,11 @@ FIELDS_SHORT = [
     #('sdbw',        38,  44),
     #('snr',         44,  50),
     (VG1_FIELD_REL,  50,  56),
-    #('sprob',       56,  62),    
-    #('snrxx', 62,  67),    
+    #('sprob',       56,  62),
+    #('snrxx', 62,  67),
 ]
 
-VG1_DATA_START=4
+VG1_DATA_START = 4
 
 # MUF colormap -- 0-35 MHz
 MUF_COLORS = [
@@ -314,14 +314,14 @@ def _resolve_ant_dedx_control(params):
     if "ANTDEDXCONTROL" in params:
         try:
             v = int(params["ANTDEDXCONTROL"])
-        except (ValueError,KeyError):
+        except (ValueError, KeyError):
             v = 0
         log.info("ANTDEDXCONTROL from query param: %d", v)
     else:
         log.info("ANTDEDXCONTROL not present in query")
-        v = 0    
+        v = 0
     return v
-    
+
 def _resolve_ant_de_index(params):
     if "ANTDEINDEX" in params:
         try:
@@ -343,11 +343,11 @@ def _resolve_ant_dx_index(params):
         log.info("ANTDXINDEX from query param: %d", v)
     else:
         log.info("ANTDXINDEX not present in query")
-        v = 0    
-    return v    
+        v = 0
+    return v
 
 def fmt_4c(flt: float) -> str:
-    if flt >= 100.0: 
+    if flt >= 100.0:
         return f"{flt:4.1f}"[0:4]
     elif flt >= 10.0:
         return f"{flt:4.1f}"
@@ -371,7 +371,7 @@ def fmt_5c(flt: float) -> str:
 # ---------------------------------------------------------------------------
 
 def build_area_deck(year, month, utc, txlat, txlng,
-                    path, pow_w, mhz, ssn, rsn, toa, ant_dedx_control, ant_de_index, ant_dx_index, 
+                    path, pow_w, mhz, ssn, rsn, toa, ant_dedx_control, ant_de_index, ant_dx_index,
                     ant_de_az, ant_dx_az, out_subdir="ohb", out_name="pyArea"):
     utc_voa  = utc if utc > 0 else 24
     path_ch  = "L" if path else "S"
@@ -400,7 +400,7 @@ def build_area_deck(year, month, utc, txlat, txlng,
 
     # COMMENT line 1 controls VG1 output path -- pad to 80 chars
     comment1 = "COMMENT   VOACAP    {}/{}.voa".format(out_subdir, out_name).ljust(80)
-    pow_kw=pow_w/1000
+    pow_kw = pow_w / 1000
     return (
         comment1 + "\n"
         "COMMENT       0    4   -1   -1    1    0 receive.cty\n"
@@ -437,7 +437,7 @@ def build_area_deck(year, month, utc, txlat, txlng,
         lat_str="{:05.2f}{}".format(lat_abs, lat_hem),
         lon_str="{:06.2f}{}".format(lon_abs, lon_hem),
         path_ch=path_ch,
-        pow_kw=pow_w/1000,
+        pow_kw=pow_w / 1000,
         fp=fmt_4c(pow_kw),
         ta=fmt_4c(toa),
         rn=fmt_4c(rsn),
@@ -561,16 +561,10 @@ def parse_vg1(vg1_path):
                     int(fields[VG1_FIELD_Y])   # grid y -- fails on header lines
                     lat = float(fields[VG1_FIELD_LAT])
                     lon = float(fields[VG1_FIELD_LON])
-                                                  
-                                                             
                     rel = float(fields[VG1_FIELD_REL])
-                    muf = float(fields[VG1_FIELD_MUF])                    
+                    muf = float(fields[VG1_FIELD_MUF])
                     if len(line) <= VG1_SHORT_LEN+2:   # include cr/lf
-                                                
-                                                                      
-                                                      
                         angle = 0.0
-                                                      
                     else:
                         angle = float(fields[VG1_FIELD_ANGLE])
 
@@ -616,7 +610,7 @@ def interpolate_grid(vg_data, map_type="REL"):
         # Filter out VOACAP no-propagation sentinel (<=1.0 deg clamp)
         toa_pts = [(p[0], p[1], p[3]) for p in raw if 1.0 < p[3] <= 30.0]
         if not toa_pts:
-           toa_pts = [(p[0], p[1], p[3]) for p in raw]
+            toa_pts = [(p[0], p[1], p[3]) for p in raw]
         lats_arr = np.array([p[0] for p in toa_pts], dtype=np.float32)
         lons_arr = np.array([p[1] for p in toa_pts], dtype=np.float32)
         vals_arr = np.array([p[2] * 0.32 for p in toa_pts], dtype=np.float32)
@@ -987,7 +981,7 @@ def add_night_overlay(image, darkness):
     from PIL import Image as _PI, ImageDraw as _PID, ImageFilter
     import time as _time
     from scipy.ndimage import gaussian_filter
-    
+
     width, height = image.size
     t0 = _time.time()
     # Get subsolar point
@@ -1001,33 +995,38 @@ def add_night_overlay(image, darkness):
     # --- Vectorized day/night mask ---
     lons = np.linspace(-math.pi, math.pi, w2, endpoint=False, dtype=np.float32)
     lats = np.linspace(math.pi/2, -math.pi/2, h2, endpoint=False, dtype=np.float32)
-    lon_grid, lat_grid = np.meshgrid(lons, lats)    
-    log.info("TIMING lat/lon meshgrid: %.2fs", _time.time()-t0); t1=_time.time() 
+    lon_grid, lat_grid = np.meshgrid(lons, lats)
+    log.info("TIMING lat/lon meshgrid: %.2fs", _time.time() - t0)
+    t1 = _time.time()
     # Precompute constants
     sin_sun = math.sin(sun_lat_r)
-    cos_sun = math.cos(sun_lat_r)    
+    cos_sun = math.cos(sun_lat_r)
     # Vectorized cos_angle
     cos_angle = (
         sin_sun * np.sin(lat_grid) +
         cos_sun * np.cos(lat_grid) * np.cos(lon_grid - sun_lon_r)
     )
-    log.info("TIMING cos_angle: %.2fs", _time.time() - t1); t2 = _time.time()
+    log.info("TIMING cos_angle: %.2fs", _time.time() - t1)
+    t2 = _time.time()
     mask_u8 = np.clip(cos_angle / 0.1 * 255, 0, 255).astype(np.uint8)
     mask_u8 = gaussian_filter(mask_u8, sigma=max(1, w2 // 100))
-    mask_small = mask_u8.astype(np.float32) / 255.0   # one conversion, after blur   log.info("TIMING blur: %.2fs", _time.time() - t2); t3 = _time.time()
-    log.info("TIMING blur: %.2fs", _time.time() - t2); t3 = _time.time()
+    mask_small = mask_u8.astype(np.float32) / 255.0
+    log.info("TIMING blur: %.2fs", _time.time() - t2)
+    t3 = _time.time()
     # Upscale mask to full resolution via PIL BILINEAR
     from scipy.ndimage import zoom as _zoom
     zoom_y = height / h2
     zoom_x = width / w2
-    mask_array = _zoom(mask_small, (zoom_y, zoom_x), order=1)  # bilinear, stays float32    log.info("TIMING upscale: %.2fs", _time.time() - t3); t4 = _time.time()
+    mask_array = _zoom(mask_small, (zoom_y, zoom_x), order=1)
+    log.info("TIMING upscale: %.2fs", _time.time() - t3)
+    t4 = _time.time()
 
     # Alpha map: 0.0 = full day (no darkening), darkness = full night
-    alpha = (1.0 - mask_array) * darkness  # shape (H, W)
-    log.info("TIMING upscale: %.2fs", _time.time() - t3); t4 = _time.time()
+    alpha = (1.0 - mask_array) * darkness
     # Convert image to float32 — single copy via astype
     result_array = np.asarray(image.convert("RGB")).astype(np.float32)
-    log.info("TIMING convert: %.2fs", _time.time() - t4); t5 = _time.time()
+    log.info("TIMING convert: %.2fs", _time.time() - t4)
+    t5 = _time.time()
 
     # Build scale array in-place to avoid np.stack allocation
     day = (1.0 - alpha).astype(np.float32)          # (H, W) — one allocation
@@ -1035,20 +1034,20 @@ def add_night_overlay(image, darkness):
     result_array[:, :, 1] *= day
     result_array[:, :, 2] *= (1.0 - alpha * 0.7)    # blue tint in-place
     np.clip(result_array, 0, 255, out=result_array)
-    log.info("TIMING darken: %.2fs", _time.time() - t5); t6 = _time.time()
+    log.info("TIMING darken: %.2fs", _time.time() - t5)
+    t6 = _time.time()
 
-    log.info("TIMING total: %.2fs", _time.time() - t0)     
+    log.info("TIMING total: %.2fs", _time.time() - t0)
     return _PI.fromarray(result_array.astype(np.uint8))
 
-    
 def process_map_with_night(img, darkness: float = 0.5):
-    from PIL import Image as _PI  
     import time as _time
 
     t0 = _time.time()
     # Apply night overlay
     result = add_night_overlay(img, darkness=darkness)
-    log.info("TIMING adding night overlay: %.2fs", _time.time()-t0); t1=_time.time()   
+    log.info("TIMING adding night overlay: %.2fs", _time.time() - t0)
+    _time.time()
     # Save result to a new BytesIO buffer   
     out_buf = io.BytesIO()
     result.save(out_buf, format="PNG")
@@ -1137,32 +1136,32 @@ def handle_area_request(params, start_response, environ={}):
     deck = build_area_deck(year, month, utc, txlat, txlng, path, pow_w, mhz, ssn, rsn, toa, ant_dedx_control, 
                            ant_de_index, ant_dx_index, ant_de_az, ant_dx_az)
     vg1_path, tmp_dir = run_voaarea(deck)
-    log.info("TIMING voacapl: %.2fs", _time.time()-t0); t1=_time.time()
+    log.info("TIMING voacapl: %.2fs", _time.time()-t0)
+    t1 = _time.time()
     try:
         vg_data = parse_vg1(vg1_path) if vg1_path else None
-        log.info("TIMING parse: %.2fs", _time.time()-t1); t2=_time.time()
+        log.info("TIMING parse: %.2fs", _time.time()-t1)
+        t2 = _time.time()
         if vg_data:
             precomputed = interpolate_grid(vg_data, map_type)
-            log.info("TIMING interp: %.2fs", _time.time()-t2); t3=_time.time()
+            log.info("TIMING interp: %.2fs", _time.time()-t2)
+            t3 = _time.time()
             png_day,img_day = render_map(vg_data, txlat, txlng, mhz, utc, ssn,
                                    month, year, mode_label, width, height,
                                    map_type=map_type, _precomputed=precomputed)
-            log.info("TIMING render_day: %.2fs", _time.time()-t3); t4=_time.time()
+            log.info("TIMING render_day: %.2fs", _time.time()-t3)
+            t4 = _time.time()
             png_night = process_map_with_night(img_day, darkness=0.5)
-                                                                          
-                                                                                                                          
-            log.info("TIMING convert night: %.2fs", _time.time()-t4); t4=_time.time()
+            log.info("TIMING convert night: %.2fs", _time.time()-t4)
         else:
             png_day = png_night = _blank_png(width, height)
             t4 = _time.time()
     finally:
-        #log.info("temp directory is %s",tmp_dir)
         shutil.rmtree(tmp_dir, ignore_errors=True)
-                                             
 
     bmp_day   = png_to_bmp565(png_day,   width, height)
     bmp_night = png_to_bmp565(png_night, width, height)
-    log.info("TIMING bmp565: %.2fs  TOTAL: %.2fs", _time.time()-t4, _time.time()-t0)
+    log.info("TIMING bmp565: %.2fs  TOTAL: %.2fs", _time.time() - t4, _time.time() - t0)
     return _build_response(bmp_day, bmp_night, environ, start_response, "OHB-voacap-area")
 
 # Trigger coastline load at startup
