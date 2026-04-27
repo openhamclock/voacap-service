@@ -455,26 +455,25 @@ def _handle_compatibility_request(params, start_response):
         lines.append(f"{dxazk},{dxazin},{dxazout}")
 
     ctlk,ctlin,ctlout,ant_dedx_control = ps_int("ANTDEDXCONTROL")
-    ant_dedx_control = ant_dedx_control & 3;
+    ant_dedx_control = ant_dedx_control & 3
     ctlout = str(ant_dedx_control)
     if ctlin:
         lines.append(f"{ctlk},{ctlin},{ctlout}")
-            
-    deinxk,deinxin,deinxout,ant_de_index = ps_int("ANTDEINDEX")            
+
+    deinxk,deinxin,deinxout,ant_de_index = ps_int("ANTDEINDEX")
     ant = lookup_antenna(ant_de_index)
     if ant is None:
         deinxout = "0"
     if deinxin:
-        lines.append(f"{deinxk},{deinxin},{deinxout}") 
+        lines.append(f"{deinxk},{deinxin},{deinxout}")
 
-    dxinxk,dxinxin,dxinxout,ant_dx_index = ps_int("ANTDXINDEX")            
+    dxinxk,dxinxin,dxinxout,ant_dx_index = ps_int("ANTDXINDEX")
     ant = lookup_antenna(ant_dx_index)
     if ant is None:
         dxinxout = "0"
     if dxinxin:
-        lines.append(f"{dxinxk},{dxinxin},{dxinxout}") 
-    
-   
+        lines.append(f"{dxinxk},{dxinxin},{dxinxout}")
+
     body = "\n".join(lines) + "\n"
     start_response("200 OK", [
         ("Content-Type", "text/plain; charset=ISO-8859-1"),
@@ -482,8 +481,7 @@ def _handle_compatibility_request(params, start_response):
         ("Cache-Control", "no-store"),
         ("X-Generator", "OHB-voacap-service"),
     ])
-    return [body.encode("ISO-8859-1")]    
-
+    return [body.encode("ISO-8859-1")]
 
 def _handle_band_conditions(params, start_response):
 
@@ -508,11 +506,11 @@ def _handle_band_conditions(params, start_response):
 
     info_request = False
     info_type = 0
-    
+
     if "INFOREQUEST" in params:
         try:
             info_type = int(params["INFOREQUEST"])
-        except (ValueError,KeyError):
+        except (ValueError, KeyError):
             info_type = 0
         log.info("INFOREQUEST from query param: %d", info_type)
     else:
@@ -549,19 +547,18 @@ def _handle_band_conditions(params, start_response):
             ("Content-Length", str(len(msg))),
         ])
         return [msg.encode()]
-    log.info("BC Mandatory Parameters Fetched f")
-  
+    log.info("BC Mandatory Parameters Fetched")
+
     if "ANTDEINDEX" in params:
         try:
             ant_de_index = int(params["ANTDEINDEX"])
-        except (ValueError,KeyError):
+        except (ValueError, KeyError):
             ant_de_index = 0
         log.info("ANTDEINDEX from query param: %d", ant_de_index)
     else:
         log.info("ANTDEINDEX not present in query")
-        ant_de_index = 0    
-    
-    
+        ant_de_index = 0
+
     ant_de_az = 0.0
     try:
         ant_de_az = p_float("ANTDEAZ")
@@ -574,7 +571,7 @@ def _handle_band_conditions(params, start_response):
             ("Content-Length", str(len(msg))),
         ])
         return [msg.encode()]
-    log.info("BC ANTDEAZ Fetched %.1f",ant_de_az)
+    log.info("BC ANTDEAZ Fetched %.1f", ant_de_az)
 
     if (ant_de_az < 0.0 or ant_de_az > 360.0):
         msg = f"Bad parameter value: antdeax {ant_de_az}\n"
@@ -582,7 +579,7 @@ def _handle_band_conditions(params, start_response):
             ("Content-Type", "text/plain"),
             ("Content-Length", str(len(msg))),
         ])
-        return [msg.encode()]    
+        return [msg.encode()]
 
     log.info("ANTDEAZ from query param: %.1f", ant_de_az)
 
@@ -598,7 +595,7 @@ def _handle_band_conditions(params, start_response):
             ("Content-Length", str(len(msg))),
         ])
         return [msg.encode()]
-    
+
     log.info("ANTDXAZ from query param: %.1f", ant_dx_az)
 
     if (ant_dx_az < 0.0 or ant_dx_az > 360.0):
@@ -627,43 +624,42 @@ def _handle_band_conditions(params, start_response):
         else:
             ssn = estimate_ssn(year, month)
             log.debug("SSN from SC25 estimate: %.1f", ssn)
-            
+
     if "ANTDEDXCONTROL" in params:
         try:
             ant_dedx_control = int(params["ANTDEDXCONTROL"])
-        except (ValueError,KeyError):
+        except (ValueError, KeyError):
             ant_dedx_control = 0
         log.info("ANTDEDXCONTROL from query param: %d", ant_dedx_control)
     else:
         log.info("ANTDEDXCONTROL not present in query")
         ant_dedx_control = 0
- 
+
     if "ANTDEINDEX" in params:
         try:
             ant_de_index = int(params["ANTDEINDEX"])
-        except (ValueError,KeyError):
+        except (ValueError, KeyError):
             ant_de_index = 0
         log.info("ANTDEINDEX from query param: %d", ant_de_index)
     else:
         log.info("ANTDEINDEX not present in query")
         ant_de_index = 0
-        
+
     if "ANTDXINDEX" in params:
         try:
             ant_dx_index = p_int(params["ANTDXINDEX"])
-        except (ValueError,KeyError):
+        except (ValueError, KeyError):
             ant_dx_index = 0
         log.info("ANTDXINDEX from query param: %d", ant_dx_index)
     else:
         log.info("ANTDXINDEX not present in query")
-        ant_dx_index = 0            
-               
+        ant_dx_index = 0
 
     pow_kw = pow_w / 1000.0
 
     log.info(
         "Request: %dY %dM TX=%.2f,%.2f RX=%.2f,%.2f PATH=%d POW=%.0fW "
-        "MODE=%s(RSN=%.1f) TOA=%.1f SSN=%.1f ANTDEDXCONTROL=%d ANTDEINDEX=%d ANTDXINDEX=%d ANTDEAZ=%.1f ANTDXAZ%.1f",
+        "MODE=%s(RSN=%.1f) TOA=%.1f SSN=%.1f ANTDEDXCONTROL=%d ANTDEINDEX=%d ANTDXINDEX=%d ANTDEAZ=%.1f ANTDXAZ=%.1f",
         year, month, txlat, txlng, rxlat, rxlng, path, pow_w,
         mode_label, rsn, toa, ssn, ant_dedx_control, ant_de_index, ant_dx_index, ant_de_az, ant_dx_az
     )
