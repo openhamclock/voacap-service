@@ -43,8 +43,6 @@ import ephem
 
 from PIL import Image as _PI, ImageDraw as _PID, ImageFilter
 
-from antenna_lookup import lookup_antenna
-
 log = logging.getLogger("voacap_service.area_map")
 
 # ---------------------------------------------------------------------------
@@ -286,65 +284,6 @@ def _resolve_ssn(params, year, month):
             pass
     v = _read_ssn_file(SSN_FILE) if SSN_FILE else None
     return v if v is not None else _estimate_ssn(year, month)
-def _resolve_ant_de_az(params):
-    if "ANTDEAZ" in params:
-        try:
-            v = float(params["ANTDEAZ"])
-        except Exception:
-            v = 0.0
-        log.info("ANTDEAZ from query param: %5.1f", v)
-    else:
-        log.info("ANTDEAZ not present in query")
-        v = 0.0
-    return v
-
-def _resolve_ant_dx_az(params):
-    if "ANTDXAZ" in params:
-        try:
-            v = float(params["ANTDXAZ"])
-        except Exception:
-            v = 0.0
-        log.info("ANTDXAZ from query param: %5.1f", v)
-    else:
-        log.info("ANTDXAZ not present in query")
-        v = 0.0
-    return v
-  
-def _resolve_ant_dedx_control(params):
-    if "ANTDEDXCONTROL" in params:
-        try:
-            v = int(params["ANTDEDXCONTROL"])
-        except (ValueError,KeyError):
-            v = 0
-        log.info("ANTDEDXCONTROL from query param: %d", v)
-    else:
-        log.info("ANTDEDXCONTROL not present in query")
-        v = 0    
-    return v
-    
-def _resolve_ant_de_index(params):
-    if "ANTDEINDEX" in params:
-        try:
-            v = int(params["ANTDEINDEX"])
-        except (ValueError,KeyError):
-            v = 0
-        log.info("ANTDEINDEX from query param: %d", v)
-    else:
-        log.info("ANTDEINDEX not present in query")
-        v = 0    
-    return v
-
-def _resolve_ant_dx_index(params):
-    if "ANTDXINDEX" in params:
-        try:
-            v = int(params["ANTDXINDEX"])
-        except (ValueError,KeyError):
-            v = 0
-        log.info("ANTDXINDEX from query param: %d", v)
-    else:
-        log.info("ANTDXINDEX not present in query")
-        v = 0    
-    return v    
 
 def fmt_4c(flt: float) -> str:
     if flt >= 100.0: 
@@ -355,11 +294,6 @@ def fmt_4c(flt: float) -> str:
         return f"{flt:4.2f}"
     else:
         return f"{flt:.3f}"[1:]           # start at slice 1 to skip leading 0
-def fmt_5c(flt: float) -> str:
-    if flt >= 1000.0: 
-        return f"{flt:5.1f}"[0:5]
-    else:
-        return f"{flt:5.1f}"       
 # ---------------------------------------------------------------------------
 # DA1 deck builder
 #
@@ -371,32 +305,15 @@ def fmt_5c(flt: float) -> str:
 # ---------------------------------------------------------------------------
 
 def build_area_deck(year, month, utc, txlat, txlng,
-                    path, pow_w, mhz, ssn, rsn, toa, ant_dedx_control, ant_de_index, ant_dx_index, 
-                    ant_de_az, ant_dx_az, out_subdir="ohb", out_name="pyArea"):
+                    path, pow_w, mhz, ssn, rsn, toa,
+                    out_subdir="ohb", out_name="pyArea"):
+
     utc_voa  = utc if utc > 0 else 24
     path_ch  = "L" if path else "S"
     lat_abs  = abs(txlat)
     lat_hem  = "N" if txlat >= 0 else "S"
     lon_abs  = abs(txlng)
     lon_hem  = "E" if txlng >= 0 else "W"
-
-    # Validate antenna selection
-    ant_de_index_str = "default/isotrope"
-    ant_dx_index_str = "default/isotrope"
-    if ant_dedx_control & 1:
-        log.info("VOACAP info ant_dedx_control 1 for ant_de_index %d", ant_de_index)
-        ant = lookup_antenna(ant_de_index)
-        if ant:
-            log.info("VOACAP info tx path is %s", ant['path'])
-            ant_de_index_str = ant['path']
-    if ant_dedx_control & 2:
-        log.info("VOACAP info ant_dedx_control 2 for ant_dx_index %d", ant_dx_index) 
-        ant = lookup_antenna(ant_dx_index)
-        if ant:
-            log.info("VOACAP info rx path is %s", ant['path'])
-            ant_dx_index_str = ant['path']
-    ant_de_index_card = f"{ant_de_index_str:<21}"
-    ant_dx_index_card = f"{ant_dx_index_str:<21}"
 
     # COMMENT line 1 controls VG1 output path -- pad to 80 chars
     comment1 = "COMMENT   VOACAP    {}/{}.voa".format(out_subdir, out_name).ljust(80)
@@ -422,8 +339,8 @@ def build_area_deck(year, month, utc, txlat, txlng,
         "CIRCUIT   {lat_str:<6s}  {lon_str:>8s}    {lat_str:<6s}  {lon_str:>8s}  {path_ch}     0\n"
         "SYSTEM     {fp} 145. {ta}  90. {rn} 3.00 0.00\n"
         "FPROB      1.00 1.00 1.00 0.00\n"
-        "ANTENNA       1    1    2   30     0.000[{ant_de_index_card}]{dea}  {pow_kw}\n"
-        "ANTENNA       2    2    2   30     0.000[{ant_dx_index_card}]{dxa}    0.0000\n"
+        "ANTENNA       1    1    2   30     0.000[default/isotrope     ]  0.0  {pow_kw}\n"
+        "ANTENNA       2    2    2   30     0.000[default/isotrope     ]  0.0    0.0000\n"
         "METHOD      130    0\n"
         "EXECUTE\n"
         "QUIT\n"
@@ -440,11 +357,7 @@ def build_area_deck(year, month, utc, txlat, txlng,
         pow_kw=pow_w/1000,
         fp=fmt_4c(pow_kw),
         ta=fmt_4c(toa),
-        rn=fmt_4c(rsn),
-        ant_de_index_card=ant_de_index_card,
-        ant_dx_index_card=ant_dx_index_card,
-        dea=fmt_5c(ant_de_az),
-        dxa=fmt_5c(ant_dx_az)
+        rn=fmt_4c(rsn)
     )
 
 # ---------------------------------------------------------------------------
@@ -1116,11 +1029,6 @@ def handle_area_request(params, start_response, environ={}):
     mode_label = MODE_LABEL.get(mode, "MODE{}".format(mode))
     rsn        = MODE_RSN.get(mode, MODE_RSN_DEFAULT)
     ssn        = _resolve_ssn(params, year, month)
-    ant_dedx_control  = _resolve_ant_dedx_control(params)    
-    ant_de_index      = _resolve_ant_de_index(params)  
-    ant_dx_index      = _resolve_ant_dx_index(params)  
-    ant_de_az         = _resolve_ant_de_az(params)         
-    ant_dx_az         = _resolve_ant_dx_az(params)      
     path_info  = environ.get("PATH_INFO", "")
     if "TOA" in path_info:
         map_type = "TOA"
@@ -1129,13 +1037,12 @@ def handle_area_request(params, start_response, environ={}):
     else:
         map_type = "REL"
 
-    log.info("AreaMap(%s): %d/%02d UTC=%02d TX=(%.4f,%.4f) %.3fMHz %s SSN=%.0f ANTDEDXCONTROL=%d ANTDEINDEX=%d ANTDXINDEX=%d ANTDEAZ=%.1f ANTDXAZ=%.1f %dx%d",
-             map_type, year, month, utc, txlat, txlng, mhz, mode_label, ssn, ant_dedx_control, ant_de_index, ant_dx_index, ant_de_az, ant_dx_az, width, height)
+    log.info("AreaMap(%s): %d/%02d UTC=%02d TX=(%.4f,%.4f) %.3fMHz %s SSN=%.0f %dx%d",
+             map_type, year, month, utc, txlat, txlng, mhz, mode_label, ssn, width, height)
 
     import time as _time
     t0 = _time.time()
-    deck = build_area_deck(year, month, utc, txlat, txlng, path, pow_w, mhz, ssn, rsn, toa, ant_dedx_control, 
-                           ant_de_index, ant_dx_index, ant_de_az, ant_dx_az)
+    deck = build_area_deck(year, month, utc, txlat, txlng, path, pow_w, mhz, ssn, rsn, toa)
     vg1_path, tmp_dir = run_voaarea(deck)
     log.info("TIMING voacapl: %.2fs", _time.time()-t0); t1=_time.time()
     try:
