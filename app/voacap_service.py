@@ -24,17 +24,30 @@ import shutil
 import subprocess
 import tempfile
 import logging
+
+# Configure logging BEFORE any other local imports
+LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO")
+logging.basicConfig(
+    level=getattr(logging, LOG_LEVEL, logging.INFO),
+    format="%(asctime)s %(levelname)s %(message)s",
+)
+
+log = logging.getLogger("voacap_service")
+log.info("TEST - logging initialized")
+
+
 from urllib.parse import parse_qs
 
-# Area map module (VOAAREA METHOD 130 native mode)
-from area_map import handle_area_request
+from antenna_lookup import lookup_antenna
+
+
 
 # ---------------------------------------------------------------------------
 # Configuration (override via environment variables)
 # ---------------------------------------------------------------------------
 VOACAP_BIN  = os.environ.get("VOACAP_BIN",  "voacapl")
 VOACAP_AREA = os.environ.get("VOACAP_AREA", "/opt/voacapl/itshfbc")
-LOG_LEVEL   = os.environ.get("LOG_LEVEL", "INFO")
+
 
 # Path to the 31-day SSN file produced by OHB (YYYY MM DD SSN format).
 # Default matches OHB standard layout. Set to empty string to disable.
@@ -50,12 +63,11 @@ SSN_MODE = os.environ.get("VOACAP_SSN_MODE", "latest").strip().lower()
 if SSN_MODE not in ("latest", "average"):
     SSN_MODE = "latest"
 
-logging.basicConfig(
-    level=getattr(logging, LOG_LEVEL, logging.INFO),
-    format="%(asctime)s %(levelname)s %(message)s",
-)
-log = logging.getLogger("voacap_service")
 
+
+# import area_map after basicConfig but before any use of logging
+# Area map module (VOAAREA METHOD 130 native mode)
+from area_map import handle_area_request
 # HamClock 9 bands (MHz) — 50 MHz included; VOACAP HF model returns 0 for it
 BANDS_MHZ = [3.75, 5.36, 7.15, 10.13, 14.18, 18.12, 21.23, 24.94, 28.85]
 
@@ -210,6 +222,9 @@ def build_deck(
     rxlat: float, rxlng: float,
     path: int, pow_kw: float, ssn: float,
     rsn: float, toa: float,
+    ant_dedx_control: int, ant_de_index: int,
+    ant_dx_index: int,
+    ant_de_az: float, ant_dx_az: float,
 ) -> str:
     def lat(deg):
         return ("%.2f" % abs(deg)).rjust(5) + ("N" if deg >= 0 else "S")
@@ -225,6 +240,22 @@ def build_deck(
         + ("  S " if not path else "  L ")
         + str(path).rjust(5)
     )
+
+    # Validate antenna selection
+    ant_de_index_str = "default/isotrope"
+    ant_dx_index_str = "default/isotrope"
+    if ant_dedx_control & 1:
+        log.info("VOACAP info ant_dedx_control 1 for ant_de_index %d", ant_de_index)
+        ant = lookup_antenna(ant_de_index)
+        if ant:
+            log.info("VOACAP info tx path is %s", ant['path'])
+            ant_de_index_str = ant['path']
+    if ant_dedx_control & 2:
+        log.info("VOACAP info ant_dedx_control 2 for ant_dx_index %d", ant_dx_index) 
+        ant = lookup_antenna(ant_dx_index)
+        if ant:
+            log.info("VOACAP info rx path is %s", ant['path'])
+            ant_dx_index_str = ant['path']
 
     # RSN is passed in from the MODE→RSN map; calibrated at 17 dB for CW.
     # SYSTEM fields: pow(kW) noise(dBW) amind xlufp rsn pmp dmpx
@@ -252,8 +283,8 @@ def build_deck(
         circuit,
         system,
         "FPROB      1.00 1.00 1.00 0.00",
-        _antenna_card(0, "default/isotrope", 0.0, pow_kw),
-        _antenna_card(1, "default/isotrope", 0.0, 0.0),
+        _antenna_card(0, ant_de_index_str, ant_de_az, pow_kw),
+        _antenna_card(1, ant_dx_index_str, ant_dx_az, 0.0),
         freq_card,
         "METHOD       30    0",
         "EXECUTE",
@@ -389,7 +420,7 @@ def application(environ, start_response):
     path   = environ.get("PATH_INFO", "/")
     qs     = environ.get("QUERY_STRING", "")
     params = {k: v[0] for k, v in parse_qs(qs, keep_blank_values=True).items()}
-
+    log.info("APP - dispatching path %s",path)
     # VOAAREA single-frequency coverage map (CSI-compatible endpoint)
     if path in ("/fetchVOACAPArea.pl",
                 "/ham/HamClock/fetchVOACAPArea.pl",
@@ -399,8 +430,88 @@ def application(environ, start_response):
                 "/ham/HamClock/fetchVOACAP-MUF.pl"):
         return handle_area_request(params, start_response, environ)
 
+    if path in ("/fetchVOACAPcapability.pl"):
+        return _handle_compatibility_request(params, start_response)
     # Fall through to band conditions handler
     return _handle_band_conditions(params, start_response)
+
+def _handle_compatibility_request(params, start_response):
+
+    # process integer parameter, return tuple
+    # key,value in,value received,value as int
+    def ps_int(k):
+        vin = params.get(k)
+        vouti = 0
+        if vin is None:
+            vouti = 0
+            vin = ""
+        try:
+            vouti = int(vin)
+        except ValueError:
+            vouti = 0
+        vout = str(vouti)
+        return k,vin,vout,vouti
+        
+    # process float parameter, return tuple
+    # key,value in,value received,value as float 
+    def ps_float(k):
+        vin = params.get(k)
+        voutf = 0.0
+        if vin is None:
+            voutf = 0.0
+            vin = ""
+        try:
+            voutf = float(vin)
+        except ValueError:
+            voutf = 0.0
+        vout = f"{voutf:.1f}"
+        return k,vin,vout,voutf 
+
+    lines = []
+
+    lines.append("parameter,received,used")
+    
+    deazk,deazin,deazout,ant_de_az = ps_float("ANTDEAZ")
+    if (ant_de_az < 0.0 or ant_de_az > 360.0):
+        deazout = "0.0"    
+    if deazin:
+        lines.append(f"{deazk},{deazin},{deazout}")
+
+    dxazk,dxazin,dxazout,ant_dx_az = ps_float("ANTDXAZ")
+    if (ant_dx_az < 0.0 or ant_dx_az > 360.0):
+        dxazout = "0.0"  
+    if dxazin:
+        lines.append(f"{dxazk},{dxazin},{dxazout}")
+
+    ctlk,ctlin,ctlout,ant_dedx_control = ps_int("ANTDEDXCONTROL")
+    ant_dedx_control = ant_dedx_control & 3;
+    ctlout = str(ant_dedx_control)
+    if ctlin:
+        lines.append(f"{ctlk},{ctlin},{ctlout}")
+            
+    deinxk,deinxin,deinxout,ant_de_index = ps_int("ANTDEINDEX")            
+    ant = lookup_antenna(ant_de_index)
+    if ant is None:
+        deinxout = "0"
+    if deinxin:
+        lines.append(f"{deinxk},{deinxin},{deinxout}") 
+
+    dxinxk,dxinxin,dxinxout,ant_dx_index = ps_int("ANTDXINDEX")            
+    ant = lookup_antenna(ant_dx_index)
+    if ant is None:
+        dxinxout = "0"
+    if dxinxin:
+        lines.append(f"{dxinxk},{dxinxin},{dxinxout}") 
+    
+   
+    body = "\n".join(lines) + "\n"
+    start_response("200 OK", [
+        ("Content-Type", "text/plain; charset=ISO-8859-1"),
+        ("Content-Length", str(len(body.encode()))),
+        ("Cache-Control", "no-store"),
+        ("X-Generator", "OHB-voacap-service"),
+    ])
+    return [body.encode("ISO-8859-1")]    
 
 
 def _handle_band_conditions(params, start_response):
@@ -422,6 +533,22 @@ def _handle_band_conditions(params, start_response):
             return float(v)
         except ValueError:
             raise ValueError(f"Invalid float for {k}: {v!r}")
+
+
+    info_request = False
+    info_type = 0
+    
+    if "INFOREQUEST" in params:
+        try:
+            info_type = int(params["INFOREQUEST"])
+        except (ValueError,KeyError):
+            info_type = 0
+        log.info("INFOREQUEST from query param: %d", info_type)
+    else:
+        log.info("INFOTYPE not present in query")
+    
+    if (info_type == 1):
+        return _handle_compatibility_request(params, start_response)
 
     # All parameters are required — return 400 if any are missing or malformed
     REQUIRED = ("YEAR", "MONTH", "RXLAT", "RXLNG", "TXLAT", "TXLNG",
@@ -451,7 +578,66 @@ def _handle_band_conditions(params, start_response):
             ("Content-Length", str(len(msg))),
         ])
         return [msg.encode()]
+    log.info("BC Mandatory Parameters Fetched f")
+  
+    if "ANTDEINDEX" in params:
+        try:
+            ant_de_index = int(params["ANTDEINDEX"])
+        except (ValueError,KeyError):
+            ant_de_index = 0
+        log.info("ANTDEINDEX from query param: %d", ant_de_index)
+    else:
+        log.info("ANTDEINDEX not present in query")
+        ant_de_index = 0    
+    
+    
+    ant_de_az = 0.0
+    try:
+        ant_de_az = p_float("ANTDEAZ")
+    except KeyError as e:
+        ant_de_az = 0.0
+    except ValueError as e:
+        msg = f"Bad parameter value: {e}\n"
+        start_response("400 Bad Request", [
+            ("Content-Type", "text/plain"),
+            ("Content-Length", str(len(msg))),
+        ])
+        return [msg.encode()]
+    log.info("BC ANTDEAZ Fetched %.1f",ant_de_az)
 
+    if (ant_de_az < 0.0 or ant_de_az > 360.0):
+        msg = f"Bad parameter value: antdeax {ant_de_az}\n"
+        start_response("400 Bad Request", [
+            ("Content-Type", "text/plain"),
+            ("Content-Length", str(len(msg))),
+        ])
+        return [msg.encode()]    
+
+    log.info("ANTDEAZ from query param: %.1f", ant_de_az)
+
+    ant_dx_az = 0.0
+    try:
+        ant_dx_az = p_float("ANTDXAZ")
+    except KeyError as e:
+        ant_dx_az = 0.0
+    except ValueError as e:
+        msg = f"Bad parameter value: {e}\n"
+        start_response("400 Bad Request", [
+            ("Content-Type", "text/plain"),
+            ("Content-Length", str(len(msg))),
+        ])
+        return [msg.encode()]
+    
+    log.info("ANTDXAZ from query param: %.1f", ant_dx_az)
+
+    if (ant_dx_az < 0.0 or ant_dx_az > 360.0):
+        msg = f"Bad parameter value: ANTDXAZ {ant_dx_az}\n"
+        start_response("400 Bad Request", [
+            ("Content-Type", "text/plain"),
+            ("Content-Length", str(len(msg))),
+        ])
+        return [msg.encode()]
+        
     # Resolve mode → label and required SNR
     mode_label = MODE_LABEL.get(mode, f"MODE{mode}")
     rsn        = MODE_RSN.get(mode, MODE_RSN_DEFAULT)
@@ -470,17 +656,48 @@ def _handle_band_conditions(params, start_response):
         else:
             ssn = estimate_ssn(year, month)
             log.debug("SSN from SC25 estimate: %.1f", ssn)
+            
+    if "ANTDEDXCONTROL" in params:
+        try:
+            ant_dedx_control = int(params["ANTDEDXCONTROL"])
+        except (ValueError,KeyError):
+            ant_dedx_control = 0
+        log.info("ANTDEDXCONTROL from query param: %d", ant_dedx_control)
+    else:
+        log.info("ANTDEDXCONTROL not present in query")
+        ant_dedx_control = 0
+ 
+    if "ANTDEINDEX" in params:
+        try:
+            ant_de_index = int(params["ANTDEINDEX"])
+        except (ValueError,KeyError):
+            ant_de_index = 0
+        log.info("ANTDEINDEX from query param: %d", ant_de_index)
+    else:
+        log.info("ANTDEINDEX not present in query")
+        ant_de_index = 0
+        
+    if "ANTDXINDEX" in params:
+        try:
+            ant_dx_index = p_int(params["ANTDXINDEX"])
+        except (ValueError,KeyError):
+            ant_dx_index = 0
+        log.info("ANTDXINDEX from query param: %d", ant_dx_index)
+    else:
+        log.info("ANTDXINDEX not present in query")
+        ant_dx_index = 0            
+               
 
     pow_kw = pow_w / 1000.0
 
     log.info(
         "Request: %dY %dM TX=%.2f,%.2f RX=%.2f,%.2f PATH=%d POW=%.0fW "
-        "MODE=%s(RSN=%.1f) TOA=%.1f SSN=%.1f",
+        "MODE=%s(RSN=%.1f) TOA=%.1f SSN=%.1f ANTDEDXCONTROL=%d ANTDEINDEX=%d ANTDXINDEX=%d ANTDEAZ=%.1f ANTDXAZ%.1f",
         year, month, txlat, txlng, rxlat, rxlng, path, pow_w,
-        mode_label, rsn, toa, ssn,
+        mode_label, rsn, toa, ssn, ant_dedx_control, ant_de_index, ant_dx_index, ant_de_az, ant_dx_az
     )
 
-    deck  = build_deck(year, month, txlat, txlng, rxlat, rxlng, path, pow_kw, ssn, rsn, toa)
+    deck  = build_deck(year, month, txlat, txlng, rxlat, rxlng, path, pow_kw, ssn, rsn, toa, ant_dedx_control, ant_de_index, ant_dx_index, ant_de_az, ant_dx_az)
     lines = run_voacap(deck)
     rel   = parse_rel(lines) if lines else [[0.0] * 9] * 24
 
