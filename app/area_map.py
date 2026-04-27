@@ -905,7 +905,7 @@ def add_night_overlay(image, darkness):
     t0 = _time.time()
     # Get subsolar point
     sun_lat, sun_lon = get_subsolar_point()
-    print(f"Subsolar point: lat={sun_lat:.2f}, lon={sun_lon:.2f}")
+    log.info("Subsolar point: lat=%.2f, lon=%.2f", sun_lat, sun_lon)
     sun_lat_r = math.radians(sun_lat)
     sun_lon_r = math.radians(sun_lon)
     # --- Work at reduced reslution then upscale
