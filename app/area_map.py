@@ -945,28 +945,6 @@ def png_to_bmp565(png_bytes, width, height):
 # WSGI handler
 # ---------------------------------------------------------------------------
 
-def get_subsolar_point():
-    """Get the lat/lon of the point on Earth directly under the sun."""
-    now = datetime.datetime.utcnow()
-    
-    obs = ephem.Observer()
-    obs.date = now
-    obs.lat = '0'
-    obs.lon = '0'
-    obs.elevation = 0
-    
-    sun = ephem.Sun(obs)
-    
-    # Sun's declination = subsolar latitude
-    lat = math.degrees(sun.dec)
-    
-    # Convert RA to longitude using Greenwich Sidereal Time
-    gst = obs.sidereal_time()  # returns GST in radians as ephem angle
-    lon = math.degrees(sun.ra - gst)
-    lon = (lon + 180) % 360 - 180  # normalize to -180..180
-    
-    return lat, lon
-
 def add_night_overlay(image, darkness):
     """
     Overlay a night-side darkening on a world map image.
@@ -978,66 +956,18 @@ def add_night_overlay(image, darkness):
     Returns:
         New PIL Image with night side darkened
     """
-    from PIL import Image as _PI, ImageDraw as _PID, ImageFilter
+    from PIL import Image as _PI
     import time as _time
-    from scipy.ndimage import gaussian_filter
 
-    width, height = image.size
     t0 = _time.time()
-    # Get subsolar point
-    sun_lat, sun_lon = get_subsolar_point()
-    log.info("Subsolar point: lat=%.2f, lon=%.2f", sun_lat, sun_lon)
-    sun_lat_r = math.radians(sun_lat)
-    sun_lon_r = math.radians(sun_lon)
-    # --- Work at reduced reslution then upscale
-    scale = 4
-    w2, h2 = width // scale, height // scale
-    # --- Vectorized day/night mask ---
-    lons = np.linspace(-math.pi, math.pi, w2, endpoint=False, dtype=np.float32)
-    lats = np.linspace(math.pi/2, -math.pi/2, h2, endpoint=False, dtype=np.float32)
-    lon_grid, lat_grid = np.meshgrid(lons, lats)
-    log.info("TIMING lat/lon meshgrid: %.2fs", _time.time() - t0)
-    t1 = _time.time()
-    # Precompute constants
-    sin_sun = math.sin(sun_lat_r)
-    cos_sun = math.cos(sun_lat_r)
-    # Vectorized cos_angle
-    cos_angle = (
-        sin_sun * np.sin(lat_grid) +
-        cos_sun * np.cos(lat_grid) * np.cos(lon_grid - sun_lon_r)
-    )
-    log.info("TIMING cos_angle: %.2fs", _time.time() - t1)
-    t2 = _time.time()
-    mask_u8 = np.clip(cos_angle / 0.1 * 255, 0, 255).astype(np.uint8)
-    mask_u8 = gaussian_filter(mask_u8, sigma=max(1, w2 // 100))
-    mask_small = mask_u8.astype(np.float32) / 255.0
-    log.info("TIMING blur: %.2fs", _time.time() - t2)
-    t3 = _time.time()
-    # Upscale mask to full resolution via PIL BILINEAR
-    from scipy.ndimage import zoom as _zoom
-    zoom_y = height / h2
-    zoom_x = width / w2
-    mask_array = _zoom(mask_small, (zoom_y, zoom_x), order=1)
-    log.info("TIMING upscale: %.2fs", _time.time() - t3)
-    t4 = _time.time()
-
-    # Alpha map: 0.0 = full day (no darkening), darkness = full night
-    alpha = (1.0 - mask_array) * darkness
-    # Convert image to float32 — single copy via astype
+    
     result_array = np.asarray(image.convert("RGB")).astype(np.float32)
-    log.info("TIMING convert: %.2fs", _time.time() - t4)
-    t5 = _time.time()
-
-    # Build scale array in-place to avoid np.stack allocation
-    day = (1.0 - alpha).astype(np.float32)          # (H, W) — one allocation
-    result_array[:, :, 0] *= day
-    result_array[:, :, 1] *= day
-    result_array[:, :, 2] *= (1.0 - alpha * 0.7)    # blue tint in-place
+    result_array[:, :, 0] *= (1.0 - darkness)
+    result_array[:, :, 1] *= (1.0 - darkness)
+    result_array[:, :, 2] *= (1.0 - darkness * 0.7)  # blue tint
     np.clip(result_array, 0, 255, out=result_array)
-    log.info("TIMING darken: %.2fs", _time.time() - t5)
-    t6 = _time.time()
-
-    log.info("TIMING total: %.2fs", _time.time() - t0)
+    log.info("TIMING darken image : %.2fs", _time.time() - t0)
+    t1 = _time.time()    
     return _PI.fromarray(result_array.astype(np.uint8))
 
 def process_map_with_night(img, darkness: float = 0.5):
