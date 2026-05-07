@@ -25,6 +25,8 @@ import subprocess
 import tempfile
 import logging
 
+from cancellable_run import run_cancellable, ClientDisconnected
+
 # Configure logging BEFORE any other local imports
 LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO")
 logging.basicConfig(
@@ -267,9 +269,14 @@ def build_deck(
 # ---------------------------------------------------------------------------
 # Run VOACAP in an isolated temp directory, return raw output lines
 # ---------------------------------------------------------------------------
-def run_voacap(deck: str) -> list[str]:
+def run_voacap(deck: str, environ: dict | None = None) -> list[str]:
     # Each request gets its own run directory cloned from the VOACAP area.
     # This avoids any shared mutable state between concurrent requests.
+    #
+    # `environ` is the WSGI environ dict; pass it in so we can SIGKILL
+    # voacapl the moment the upstream client disconnects (see cancellable_run).
+    # If environ is None we fall back to plain blocking subprocess.run, which
+    # preserves prior behaviour for any direct caller / test harness.
     run_id  = uuid.uuid4().hex
     tmp_dir = tempfile.mkdtemp(prefix=f"voacap_{run_id}_")
     try:
@@ -294,13 +301,12 @@ def run_voacap(deck: str) -> list[str]:
         with open(dat_file, "w") as f:
             f.write(deck)
 
-        # Run VOACAP
-        result = subprocess.run(
+        # Run VOACAP — cancellable on client disconnect.
+        result = run_cancellable(
             [VOACAP_BIN, area_dir, "voacapx.dat", "voacapx.out"],
             cwd=run_dir,
-            capture_output=True,
-            text=True,
             timeout=30,
+            environ=environ,
         )
 
         if result.returncode != 0:
@@ -316,6 +322,9 @@ def run_voacap(deck: str) -> list[str]:
 
     except subprocess.TimeoutExpired:
         log.error("VOACAP timed out for run %s", run_id)
+        return []
+    except ClientDisconnected:
+        log.info("VOACAP aborted for run %s — client gone", run_id)
         return []
     except Exception as e:
         log.exception("Unexpected error in run_voacap: %s", e)
@@ -404,7 +413,7 @@ def application(environ, start_response):
     if path in ("/fetchVOACAPcapability.pl"):
         return _handle_compatibility_request(params, start_response)
     # Fall through to band conditions handler
-    return _handle_band_conditions(params, start_response)
+    return _handle_band_conditions(params, start_response, environ)
 
 def _handle_compatibility_request(params, start_response):
 
@@ -483,7 +492,7 @@ def _handle_compatibility_request(params, start_response):
     ])
     return [body.encode("ISO-8859-1")]
 
-def _handle_band_conditions(params, start_response):
+def _handle_band_conditions(params, start_response, environ=None):
 
     def p_int(k):
         v = params.get(k)
@@ -665,7 +674,7 @@ def _handle_band_conditions(params, start_response):
     )
 
     deck  = build_deck(year, month, txlat, txlng, rxlat, rxlng, path, pow_kw, ssn, rsn, toa, ant_dedx_control, ant_de_index, ant_dx_index, ant_de_az, ant_dx_az)
-    lines = run_voacap(deck)
+    lines = run_voacap(deck, environ=environ)
     rel   = parse_rel(lines) if lines else [[0.0] * 9] * 24
 
     # format_output uses mode_label for the param echo line

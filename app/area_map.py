@@ -44,6 +44,7 @@ import ephem
 from PIL import Image as _PI, ImageDraw as _PID, ImageFilter
 
 from antenna_lookup import lookup_antenna
+from cancellable_run import run_cancellable, ClientDisconnected
 
 log = logging.getLogger("voacap_service.area_map")
 
@@ -451,10 +452,14 @@ def build_area_deck(year, month, utc, txlat, txlng,
 # Run voacapl area mode
 # ---------------------------------------------------------------------------
 
-def run_voaarea(deck):
+def run_voaarea(deck, environ=None):
     """
     Write deck to a tmp clone of itshfbc, run voacapl, return (vg1_path, tmp_dir).
     Caller must shutil.rmtree(tmp_dir) when done.
+
+    `environ` is the WSGI environ dict; if supplied, voacapl is killed early
+    when the upstream client disconnects (see cancellable_run). Without it,
+    behaviour is the same as a plain subprocess.run with timeout=120.
     """
     run_id   = uuid.uuid4().hex[:8]
     out_sub  = "ohb_{}".format(run_id)
@@ -496,10 +501,11 @@ def run_voaarea(deck):
     log.debug("VOAAREA run_id=%s deck:\n%s", run_id, deck)
 
     try:
-        r = subprocess.run(
+        r = run_cancellable(
             [VOACAP_BIN, area_dir, "area", "calc", "default"],
             cwd=run_dir,
-            capture_output=True, text=True, timeout=120,
+            timeout=120,
+            environ=environ,
         )
         log.debug("VOAAREA rc=%d stdout=%s", r.returncode, r.stdout[:400])
         if r.stderr:
@@ -507,6 +513,12 @@ def run_voaarea(deck):
     except subprocess.TimeoutExpired:
         log.error("VOAAREA timed out")
         return None, tmp_dir
+    except ClientDisconnected:
+        # Re-raise so the WSGI handler can abort. Clean up our tmp_dir first
+        # since the caller never received it (we raise before returning).
+        log.info("VOAAREA aborted — client gone (run %s)", run_id)
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+        raise
 
     vg1 = os.path.join(out_dir, "{}.vg1".format(out_name))
     if not os.path.exists(vg1):
@@ -1065,7 +1077,14 @@ def handle_area_request(params, start_response, environ={}):
     t0 = _time.time()
     deck = build_area_deck(year, month, utc, txlat, txlng, path, pow_w, mhz, ssn, rsn, toa, ant_dedx_control, 
                            ant_de_index, ant_dx_index, ant_de_az, ant_dx_az)
-    vg1_path, tmp_dir = run_voaarea(deck)
+    try:
+        vg1_path, tmp_dir = run_voaarea(deck, environ=environ)
+    except ClientDisconnected:
+        # Client gave up before voacapl finished. The response body would just
+        # be discarded by nginx, so emit a tiny 499-equivalent and free the
+        # worker immediately. We use 499 (nginx's "Client Closed Request")
+        # so it's distinguishable in logs from real upstream failures.
+        return err("499 Client Closed Request", "client disconnected\n")
     log.info("TIMING voacapl: %.2fs", _time.time()-t0)
     t1 = _time.time()
     try:
