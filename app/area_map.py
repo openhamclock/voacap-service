@@ -1081,11 +1081,10 @@ def handle_area_request(params, start_response, environ={}):
         map_type = "REL"
     if not check_admission(map_type):
         t0 = _time.time()
-        png_day = png_night = _blank_png(width, height)
-        bmp_day   = png_to_bmp565(png_day,   width, height)
-        bmp_night = png_to_bmp565(png_night, width, height)
+        png_m = _blank_png(width, height)
+        bmp_m = png_to_bmp565(png_m,   width, height)
         log.info("TIMING admission failed: %.2fs", _time.time()-t0)
-        return _build_response(bmp_day, bmp_night, environ, start_response, "OHB-voacap-area")
+        return _build_response(bmp_m, bmp_m, environ, start_response, "OHB-voacap-area")
 
     mode_label = MODE_LABEL.get(mode, "MODE{}".format(mode))
     rsn        = MODE_RSN.get(mode, MODE_RSN_DEFAULT)
