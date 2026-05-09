@@ -68,7 +68,7 @@ Expected output (HamClock wire protocol):
 | `POW` | TX power in watts | `100` |
 | `MODE` | Mode: 19=CW, 0/1=SSB | `19` |
 | `TOA` | Minimum takeoff angle (degrees) | `3.0` |
-| `SSN` | Sunspot number (optional — auto-estimated if omitted) | `71` |
+| `ohb-ssn` | Sunspot number (optional — auto-estimated if omitted) | `71` |
 
 ## Configure HamClock to use OHB
 

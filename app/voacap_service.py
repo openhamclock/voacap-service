@@ -558,8 +558,8 @@ def _handle_band_conditions(params, start_response, environ=None):
     mode_label = MODE_LABEL.get(mode, f"MODE{mode}")
     rsn        = MODE_RSN.get(mode, MODE_RSN_DEFAULT)
 
-    # SSN priority: explicit query param (SSN or ssn) > SC25 model estimate
-    ssn_raw = params.get("SSN") or params.get("ssn")
+    # SSN priority: explicit query param (SSN or ohb-ssn) > SC25 model estimate
+    ssn_raw = params.get("SSN") or params.get("ohb-ssn")
     if ssn_raw is not None:
         try:
             ssn = float(ssn_raw)

@@ -258,7 +258,7 @@ def _estimate_ssn(year, month):
     return max(1.0, min(300.0, round(180 * math.exp(-0.3 * abs(t)), 1)))
 
 def _resolve_ssn(params, year, month):
-    ssn_raw = params.get("SSN") or params.get("ssn")
+    ssn_raw = params.get("SSN") or params.get("ohb-ssn")
     if ssn_raw is not None:
         try:
             return float(ssn_raw)
