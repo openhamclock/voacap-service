@@ -11,21 +11,8 @@ services:
     restart: unless-stopped
     environment:
       LOG_LEVEL: INFO
-      # SSN_MODE: latest or average (default: latest)
-      # VOACAP_SSN_MODE: average
     networks:
       - ohb
-    volumes:
-      # Mount the OHB SSN directory read-only so the container can read
-      # ssn-31.txt that is updated by your existing OHB cron jobs on the host.
-      # The path inside the container matches VOACAP_SSN_FILE default so no
-      # extra env var is needed.
-      - type: volume
-        source: ohb-htdocs
-        target: /opt/hamclock-backend/htdocs/ham/HamClock/ssn
-        volume:
-          subpath: ham/HamClock/ssn
-        read_only: true
     shm_size: "64mb"    # /dev/shm for fast VOACAP temp files
     mem_limit: "512m"
     cpus: "2.0"
@@ -46,8 +33,4 @@ services:
 
 networks:
   ohb:
-    external: true
-
-volumes:
-  ohb-htdocs:
     external: true

@@ -53,10 +53,6 @@ log = logging.getLogger("voacap_service.area_map")
 # ---------------------------------------------------------------------------
 VOACAP_BIN  = os.environ.get("VOACAP_BIN",  "voacapl")
 VOACAP_AREA = os.environ.get("VOACAP_AREA", "/root/itshfbc")
-SSN_FILE    = os.environ.get("VOACAP_SSN_FILE",
-    "/opt/hamclock-backend/htdocs/ham/HamClock/ssn/ssn-31.txt")
-SSN_MODE    = os.environ.get("VOACAP_SSN_MODE", "latest").strip().lower()
-
 DEFAULT_WIDTH  = 800
 DEFAULT_HEIGHT = 400
 
@@ -257,36 +253,18 @@ MUF_MAX = 35.0  # MHz
 # SSN
 # ---------------------------------------------------------------------------
 
-def _read_ssn_file(path):
-    try:
-        with open(path) as f:
-            lines = [l.strip() for l in f if l.strip()]
-        values = []
-        for line in lines:
-            parts = line.split()
-            if len(parts) >= 4:
-                try:
-                    values.append(float(parts[3]))
-                except ValueError:
-                    pass
-        if not values:
-            return None
-        return values[-1] if SSN_MODE != "average" else round(sum(values)/len(values), 1)
-    except Exception:
-        return None
-
 def _estimate_ssn(year, month):
     t = (year - 2025) + (month - 1) / 12.0
     return max(1.0, min(300.0, round(180 * math.exp(-0.3 * abs(t)), 1)))
 
 def _resolve_ssn(params, year, month):
-    if "SSN" in params:
+    ssn_raw = params.get("SSN") or params.get("ssn")
+    if ssn_raw is not None:
         try:
-            return float(params["SSN"])
+            return float(ssn_raw)
         except ValueError:
             pass
-    v = _read_ssn_file(SSN_FILE) if SSN_FILE else None
-    return v if v is not None else _estimate_ssn(year, month)
+    return _estimate_ssn(year, month)
 def _resolve_ant_de_az(params):
     if "ANTDEAZ" in params:
         try:

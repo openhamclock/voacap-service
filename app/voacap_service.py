@@ -50,23 +50,6 @@ from antenna_lookup import lookup_antenna
 VOACAP_BIN  = os.environ.get("VOACAP_BIN",  "voacapl")
 VOACAP_AREA = os.environ.get("VOACAP_AREA", "/opt/voacapl/itshfbc")
 
-
-# Path to the 31-day SSN file produced by OHB (YYYY MM DD SSN format).
-# Default matches OHB standard layout. Set to empty string to disable.
-SSN_FILE = os.environ.get(
-    "VOACAP_SSN_FILE",
-    "/opt/hamclock-backend/htdocs/ham/HamClock/ssn/ssn-31.txt",
-)
-
-# SSN_MODE controls which value is extracted from the 31-day file:
-#   "latest"  — use the last (most recent) entry in the file  [default]
-#   "average" — use the mean of all 31 entries in the file
-SSN_MODE = os.environ.get("VOACAP_SSN_MODE", "latest").strip().lower()
-if SSN_MODE not in ("latest", "average"):
-    SSN_MODE = "latest"
-
-
-
 # import area_map after basicConfig but before any use of logging
 # Area map module (VOAAREA METHOD 130 native mode)
 from area_map import handle_area_request
@@ -115,50 +98,6 @@ MODE_LABEL: dict[int, str] = {
     19: "CW",
     49: "AM",
 }
-
-# ---------------------------------------------------------------------------
-# SSN resolution
-#
-# Priority: explicit SSN= query param > ssn-31.txt file > SC25 estimate
-#
-# ssn-31.txt format — one entry per line:
-#   YYYY MM DD SSN
-# Example:
-#   2026 03 07 75
-#
-# VOACAP_SSN_MODE=latest  → SSN = last line's value (most recent observation)
-# VOACAP_SSN_MODE=average → SSN = mean of all values in the file
-# ---------------------------------------------------------------------------
-
-def _read_ssn_file(path: str) -> float | None:
-    """Parse ssn-31.txt and return SSN per SSN_MODE. Returns None on any error."""
-    try:
-        with open(path) as f:
-            lines = [ln.strip() for ln in f if ln.strip()]
-        values = []
-        for line in lines:
-            parts = line.split()
-            if len(parts) >= 4:
-                try:
-                    values.append(float(parts[3]))
-                except ValueError:
-                    continue
-        if not values:
-            log.warning("SSN file %s: no parseable entries", path)
-            return None
-        if SSN_MODE == "average":
-            result = round(sum(values) / len(values), 1)
-            log.debug("SSN from file (average of %d): %.1f", len(values), result)
-        else:
-            result = values[-1]
-            log.debug("SSN from file (latest): %.1f", result)
-        return result
-    except FileNotFoundError:
-        log.debug("SSN file not found: %s", path)
-        return None
-    except Exception as exc:
-        log.warning("Error reading SSN file %s: %s", path, exc)
-        return None
 
 # ---------------------------------------------------------------------------
 # SSN
@@ -619,20 +558,17 @@ def _handle_band_conditions(params, start_response, environ=None):
     mode_label = MODE_LABEL.get(mode, f"MODE{mode}")
     rsn        = MODE_RSN.get(mode, MODE_RSN_DEFAULT)
 
-    # SSN priority: explicit query param > ssn-31.txt file > SC25 model estimate
-    if "SSN" in params:
+    # SSN priority: explicit query param (SSN or ssn) > SC25 model estimate
+    ssn_raw = params.get("SSN") or params.get("ssn")
+    if ssn_raw is not None:
         try:
-            ssn = float(params["SSN"])
+            ssn = float(ssn_raw)
         except ValueError:
             ssn = estimate_ssn(year, month)
         log.debug("SSN from query param: %.1f", ssn)
     else:
-        file_ssn = _read_ssn_file(SSN_FILE) if SSN_FILE else None
-        if file_ssn is not None:
-            ssn = file_ssn
-        else:
-            ssn = estimate_ssn(year, month)
-            log.debug("SSN from SC25 estimate: %.1f", ssn)
+        ssn = estimate_ssn(year, month)
+        log.debug("SSN from SC25 estimate: %.1f", ssn)
 
     if "ANTDEDXCONTROL" in params:
         try:

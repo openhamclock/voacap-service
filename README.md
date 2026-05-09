@@ -68,7 +68,7 @@ Expected output (HamClock wire protocol):
 | `POW` | TX power in watts | `100` |
 | `MODE` | Mode: 19=CW, 0/1=SSB | `19` |
 | `TOA` | Minimum takeoff angle (degrees) | `3.0` |
-| `SSN` | Solar flux (optional — auto-estimated if omitted) | `71` |
+| `SSN` | Sunspot number (optional — auto-estimated if omitted) | `71` |
 
 ## Configure HamClock to use OHB
 
@@ -93,8 +93,6 @@ http://your-server:8080/ham/HamClock/fetchBandConditions.pl
 |----------|---------|-------------|
 | `VOACAP_BIN` | `voacapl` | Path to voacapl binary |
 | `VOACAP_AREA` | `/opt/voacapl/itshfbc` | VOACAP data area |
-| `VOACAP_SSN_FILE` | `/opt/hamclock-backend/htdocs/ham/HamClock/ssn/ssn-31.txt` | Path to OHB ssn-31.txt file |
-| `VOACAP_SSN_MODE` | `latest` | `latest` = use most recent entry; `average` = mean of all 31 entries |
 | `LOG_LEVEL` | `INFO` | Logging level (DEBUG/INFO/WARNING/ERROR) |
 | `TMPDIR` | `/dev/shm` | Where per-request temp dirs are created |
 
