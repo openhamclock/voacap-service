@@ -5,8 +5,6 @@ License: **AGPLv3** — see [LICENSE](LICENSE)
 
 ## Prerequisites
 - Docker
-- lighttpd with mod_proxy
-- OHB already running (ssn-31.txt available)
 
 ## 1. Build the image
 
@@ -22,7 +20,6 @@ docker run -d \
   --name voacap-service \
   --restart unless-stopped \
   -p 8083:8080 \
-  -v /opt/hamclock-backend/htdocs/ham/HamClock/ssn:/opt/hamclock-backend/htdocs/ham/HamClock/ssn:ro \
   ohb-voacap-service
 ```
 
