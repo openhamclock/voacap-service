@@ -11,8 +11,8 @@ services:
     restart: unless-stopped
     environment:
       LOG_LEVEL: INFO
-    networks:
-      - ohb
+    ports:
+      - 8080:8080"
     shm_size: "64mb"    # /dev/shm for fast VOACAP temp files
     mem_limit: "512m"
     cpus: "2.0"
@@ -30,7 +30,3 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
-
-networks:
-  ohb:
-    external: true
