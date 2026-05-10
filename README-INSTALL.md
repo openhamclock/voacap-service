@@ -5,8 +5,6 @@ License: **AGPLv3** — see [LICENSE](LICENSE)
 
 ## Prerequisites
 - Docker
-- lighttpd with mod_proxy
-- OHB already running
 
 ## 1. Build the image
 
