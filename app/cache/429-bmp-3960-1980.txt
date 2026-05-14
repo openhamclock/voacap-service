@@ -1,0 +1,2 @@
+Content-Type: image/bmp; charset=ISO-8859-1
+Content-Length: 31363444

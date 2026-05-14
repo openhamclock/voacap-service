@@ -64,12 +64,47 @@ COPY --from=builder /build/install/usr/local/share/ /usr/local/share/
 COPY app/voacap_service.py  /app/voacap_service.py
 COPY app/area_map.py        /app/area_map.py
 COPY app/hamclock_ua.py     /app/hamclock_ua.py
+COPY app/voacap_canned.py   /app/voacap_canned.py
 COPY app/antenna_data.py    /app/antenna_data.py
 COPY app/antenna_lookup.py  /app/antenna_lookup.py
 COPY app/cancellable_run.py /app/cancellable_run.py
 COPY app/uwsgi.ini          /app/uwsgi.ini
 COPY app/nginx.conf         /app/nginx.conf
 COPY app/entrypoint.sh      /app/entrypoint.sh
+
+
+COPY app/cache/429-bmp-1320-660.bin     /app/cache/429-bmp-1320-660.bin
+COPY app/cache/429-bmp-1320-660.txt     /app/cache/429-bmp-1320-660.txt
+COPY app/cache/429-bmp-1980-990.bin     /app/cache/429-bmp-1980-990.bin
+COPY app/cache/429-bmp-1980-990.txt     /app/cache/429-bmp-1980-990.txt
+COPY app/cache/429-bmp-2640-1320.bin    /app/cache/429-bmp-2640-1320.bin
+COPY app/cache/429-bmp-2640-1320.txt    /app/cache/429-bmp-2640-1320.txt
+COPY app/cache/429-bmp-3960-1980.bin    /app/cache/429-bmp-3960-1980.bin
+COPY app/cache/429-bmp-3960-1980.txt    /app/cache/429-bmp-3960-1980.txt
+COPY app/cache/429-bmp-5280-2640.bin    /app/cache/429-bmp-5280-2640.bin
+COPY app/cache/429-bmp-5280-2640.txt    /app/cache/429-bmp-5280-2640.txt
+COPY app/cache/429-bmp-5940-2970.bin    /app/cache/429-bmp-5940-2970.bin
+COPY app/cache/429-bmp-5940-2970.txt    /app/cache/429-bmp-5940-2970.txt
+COPY app/cache/429-bmp-660-330.bin      /app/cache/429-bmp-660-330.bin
+COPY app/cache/429-bmp-660-330.txt      /app/cache/429-bmp-660-330.txt
+COPY app/cache/429-bmp-7920-3960.bin    /app/cache/429-bmp-7920-3960.bin
+COPY app/cache/429-bmp-7920-3960.txt    /app/cache/429-bmp-7920-3960.txt
+COPY app/cache/429-zlib-1320-660.bin    /app/cache/429-zlib-1320-660.bin
+COPY app/cache/429-zlib-1320-660.txt    /app/cache/429-zlib-1320-660.txt
+COPY app/cache/429-zlib-1980-990.bin    /app/cache/429-zlib-1980-990.bin
+COPY app/cache/429-zlib-1980-990.txt    /app/cache/429-zlib-1980-990.txt
+COPY app/cache/429-zlib-2640-1320.bin   /app/cache/429-zlib-2640-1320.bin
+COPY app/cache/429-zlib-2640-1320.txt   /app/cache/429-zlib-2640-1320.txt
+COPY app/cache/429-zlib-3960-1980.bin   /app/cache/429-zlib-3960-1980.bin
+COPY app/cache/429-zlib-3960-1980.txt   /app/cache/429-zlib-3960-1980.txt
+COPY app/cache/429-zlib-5280-2640.bin   /app/cache/429-zlib-5280-2640.bin
+COPY app/cache/429-zlib-5280-2640.txt   /app/cache/429-zlib-5280-2640.txt
+COPY app/cache/429-zlib-5940-2970.bin   /app/cache/429-zlib-5940-2970.bin
+COPY app/cache/429-zlib-5940-2970.txt   /app/cache/429-zlib-5940-2970.txt
+COPY app/cache/429-zlib-660-330.bin     /app/cache/429-zlib-660-330.bin
+COPY app/cache/429-zlib-660-330.txt     /app/cache/429-zlib-660-330.txt
+COPY app/cache/429-zlib-7920-3960.bin   /app/cache/429-zlib-7920-3960.bin
+COPY app/cache/429-zlib-7920-3960.txt   /app/cache/429-zlib-7920-3960.txt
 
 # Patch version file to use IONCAP absorption model at build time.
 # entrypoint.sh re-applies this in case the data dir is mounted externally.
