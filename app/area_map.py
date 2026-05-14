@@ -44,6 +44,9 @@ import ephem
 from PIL import Image as _PI, ImageDraw as _PID, ImageFilter
 
 from antenna_lookup import lookup_antenna
+
+import random
+
 from cancellable_run import run_cancellable, ClientDisconnected
 
 log = logging.getLogger("voacap_service.area_map")
@@ -212,7 +215,7 @@ FIELDS = [
 #
 # Exmaple short header
 #
-#0         1         2         3         4         5         6        
+#0         1         2         3         4         5         6
 #012345678901234567890123456789012345678901234567890123456789012345678
 #VOACAPL Version 16.1207I
 #OHB OHB [ISOTROPE ] 100W 0deg 14ut 0Freqs Mar 104ssn
@@ -288,7 +291,7 @@ def _resolve_ant_dx_az(params):
         log.info("ANTDXAZ not present in query")
         v = 0.0
     return v
-  
+
 def _resolve_ant_dedx_control(params):
     if "ANTDEDXCONTROL" in params:
         try:
@@ -310,7 +313,7 @@ def _resolve_ant_de_index(params):
         log.info("ANTDEINDEX from query param: %d", v)
     else:
         log.info("ANTDEINDEX not present in query")
-        v = 0    
+        v = 0
     return v
 
 def _resolve_ant_dx_index(params):
@@ -335,10 +338,10 @@ def fmt_4c(flt: float) -> str:
     else:
         return f"{flt:.3f}"[1:]           # start at slice 1 to skip leading 0
 def fmt_5c(flt: float) -> str:
-    if flt >= 1000.0: 
+    if flt >= 1000.0:
         return f"{flt:5.1f}"[0:5]
     else:
-        return f"{flt:5.1f}"       
+        return f"{flt:5.1f}"
 # ---------------------------------------------------------------------------
 # DA1 deck builder
 #
@@ -369,7 +372,7 @@ def build_area_deck(year, month, utc, txlat, txlng,
             log.info("VOACAP info tx path is %s", ant['path'])
             ant_de_index_str = ant['path']
     if ant_dedx_control & 2:
-        log.info("VOACAP info ant_dedx_control 2 for ant_dx_index %d", ant_dx_index) 
+        log.info("VOACAP info ant_dedx_control 2 for ant_dx_index %d", ant_dx_index)
         ant = lookup_antenna(ant_dx_index)
         if ant:
             log.info("VOACAP info rx path is %s", ant['path'])
@@ -516,7 +519,7 @@ def parse_voacap_line(line):
     else:
         record = {name: line[start:end].strip() for name, start, end in FIELDS_SHORT}
     return record
-    
+
 # ---------------------------------------------------------------------------
 # VG1 parser
 #
@@ -529,7 +532,7 @@ def parse_voacap_line(line):
 #   REL (0.0-1.0 float)
 
 # Skip lines where x and y are not integers (header/label lines).
-                                                                                   
+
 # ---------------------------------------------------------------------------
 
 def parse_vg1(vg1_path):
@@ -634,7 +637,7 @@ def interpolate_grid(vg_data, map_type="REL"):
     wrap_mask_pos = lons_arr > 90
     wrap_mask_neg = lons_arr < -90
 
-    # Assuming your lats_arr is sorted, we find the highest unique latitude 
+    # Assuming your lats_arr is sorted, we find the highest unique latitude
     # that isn't the pole itself.
     unique_lats = np.unique(lats_arr)
     near_pole_lat = unique_lats[-1] # The highest latitude available in your data
@@ -647,7 +650,7 @@ def interpolate_grid(vg_data, map_type="REL"):
     pole_lats = np.full_like(pole_lons, 90.0)
 
     # This repeats the values from your near_pole_lat across the entire 90N line
-    # Note: If your last row has multiple longitudes, you might want to interpolate 
+    # Note: If your last row has multiple longitudes, you might want to interpolate
     # those onto these new pole_lons, but usually, just repeating the values works.
     pole_vals = np.interp(pole_lons, lons_arr[near_pole_mask], vals_arr[near_pole_mask])
 
@@ -938,11 +941,11 @@ def png_to_bmp565(png_bytes, width, height):
 def add_night_overlay(image, darkness):
     """
     Overlay a night-side darkening on a world map image.
-    
+
     Args:
         image: PIL Image of the world map (equirectangular projection)
         darkness: 0.0 = no darkening, 1.0 = fully black
-    
+
     Returns:
         New PIL Image with night side darkened
     """
@@ -950,14 +953,14 @@ def add_night_overlay(image, darkness):
     import time as _time
 
     t0 = _time.time()
-    
+
     result_array = np.asarray(image.convert("RGB")).astype(np.float32)
     result_array[:, :, 0] *= (1.0 - darkness)
     result_array[:, :, 1] *= (1.0 - darkness)
     result_array[:, :, 2] *= (1.0 - darkness * 0.7)  # blue tint
     np.clip(result_array, 0, 255, out=result_array)
     log.info("TIMING darken image : %.2fs", _time.time() - t0)
-    t1 = _time.time()    
+    t1 = _time.time()
     return _PI.fromarray(result_array.astype(np.uint8))
 
 def process_map_with_night(img, darkness: float = 0.5):
@@ -968,12 +971,12 @@ def process_map_with_night(img, darkness: float = 0.5):
     result = add_night_overlay(img, darkness=darkness)
     log.info("TIMING adding night overlay: %.2fs", _time.time() - t0)
     _time.time()
-    # Save result to a new BytesIO buffer   
+    # Save result to a new BytesIO buffer
     out_buf = io.BytesIO()
     result.save(out_buf, format="PNG")
     out_buf.seek(0)
     return out_buf.read()
-    
+
 # ---------------------------------------------------------------------------
 # Server-side BMP pair cache
 # ---------------------------------------------------------------------------
@@ -995,8 +998,23 @@ def _build_response(bmp_day, bmp_night, environ, start_response, generator="OHB-
     ])
     return [body]
 
-def handle_area_request(params, start_response, environ={}):
+def check_admission(name: str) -> bool:
+    allow_file = f'/app/allowarea_{name}'
+    result = True
+    if os.path.exists(allow_file):
+        try:
+            with open(allow_file) as f:
+                allow_pct = max(0, min(100, int(f.read().strip())))
+        except (ValueError, IOError):
+            allow_pct = 100
+        if allow_pct == 0:
+            result = False
+        elif allow_pct < 100:
+            result = random.randint(1, 100) <= allow_pct
+    return result
 
+def handle_area_request(params, start_response, environ={}):
+    import time as _time
     def p_int(k):
         v = params.get(k)
         if v is None: raise KeyError(k)
@@ -1032,14 +1050,6 @@ def handle_area_request(params, start_response, environ={}):
 
     width      = int(params.get("WIDTH",  DEFAULT_WIDTH))
     height     = int(params.get("HEIGHT", DEFAULT_HEIGHT))
-    mode_label = MODE_LABEL.get(mode, "MODE{}".format(mode))
-    rsn        = MODE_RSN.get(mode, MODE_RSN_DEFAULT)
-    ssn        = _resolve_ssn(params, year, month)
-    ant_dedx_control  = _resolve_ant_dedx_control(params)    
-    ant_de_index      = _resolve_ant_de_index(params)  
-    ant_dx_index      = _resolve_ant_dx_index(params)  
-    ant_de_az         = _resolve_ant_de_az(params)         
-    ant_dx_az         = _resolve_ant_dx_az(params)      
     path_info  = environ.get("PATH_INFO", "")
     if "TOA" in path_info:
         map_type = "TOA"
@@ -1047,13 +1057,29 @@ def handle_area_request(params, start_response, environ={}):
         map_type = "MUF"
     else:
         map_type = "REL"
+    if not check_admission(map_type):
+        t0 = _time.time()
+        png_m = _blank_png(width, height)
+        bmp_m = png_to_bmp565(png_m,   width, height)
+        log.info("TIMING admission failed: %.2fs", _time.time()-t0)
+        return _build_response(bmp_m, bmp_m, environ, start_response, "OHB-voacap-area")
+
+    mode_label = MODE_LABEL.get(mode, "MODE{}".format(mode))
+    rsn        = MODE_RSN.get(mode, MODE_RSN_DEFAULT)
+    ssn        = _resolve_ssn(params, year, month)
+    ant_dedx_control  = _resolve_ant_dedx_control(params)
+    ant_de_index      = _resolve_ant_de_index(params)
+    ant_dx_index      = _resolve_ant_dx_index(params)
+    ant_de_az         = _resolve_ant_de_az(params)
+    ant_dx_az         = _resolve_ant_dx_az(params)
+
 
     log.info("AreaMap(%s): %d/%02d UTC=%02d TX=(%.4f,%.4f) %.3fMHz %s SSN=%.0f ANTDEDXCONTROL=%d ANTDEINDEX=%d ANTDXINDEX=%d ANTDEAZ=%.1f ANTDXAZ=%.1f %dx%d",
              map_type, year, month, utc, txlat, txlng, mhz, mode_label, ssn, ant_dedx_control, ant_de_index, ant_dx_index, ant_de_az, ant_dx_az, width, height)
 
-    import time as _time
+
     t0 = _time.time()
-    deck = build_area_deck(year, month, utc, txlat, txlng, path, pow_w, mhz, ssn, rsn, toa, ant_dedx_control, 
+    deck = build_area_deck(year, month, utc, txlat, txlng, path, pow_w, mhz, ssn, rsn, toa, ant_dedx_control,
                            ant_de_index, ant_dx_index, ant_de_az, ant_dx_az)
     try:
         vg1_path, tmp_dir = run_voaarea(deck, environ=environ)
@@ -1080,15 +1106,17 @@ def handle_area_request(params, start_response, environ={}):
             t4 = _time.time()
             png_night = process_map_with_night(img_day, darkness=0.5)
             log.info("TIMING convert night: %.2fs", _time.time()-t4)
+            t5 = _time.time()
+
         else:
             png_day = png_night = _blank_png(width, height)
-            t4 = _time.time()
+            t5 = _time.time()
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)
 
     bmp_day   = png_to_bmp565(png_day,   width, height)
     bmp_night = png_to_bmp565(png_night, width, height)
-    log.info("TIMING bmp565: %.2fs  TOTAL: %.2fs", _time.time() - t4, _time.time() - t0)
+    log.info("TIMING bmp565: %.2fs  TOTAL: %.2fs", _time.time() - t5, _time.time() - t0)
     return _build_response(bmp_day, bmp_night, environ, start_response, "OHB-voacap-area")
 
 # Trigger coastline load at startup
