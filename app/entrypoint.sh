@@ -34,16 +34,22 @@ echo "voacap-service: Starting uWSGI..."
 uwsgi --ini /app/uwsgi.ini &
 UWSGI_PID=$!
 
-# Wait for socket to appear
-for i in $(seq 1 20); do
-    [ -S /run/uwsgi/voacap.sock ] && break
-    sleep 0.2
-done
+# Start uWSGI in background
+echo "voacap-canned: Starting uWSGI..."
+uwsgi --ini /app/uwsgi_canned.ini &
+UWSGI_CANNED_PID=$!
 
-if [ ! -S /run/uwsgi/voacap.sock ]; then
-    echo "voacap-service: ERROR: uWSGI socket did not appear"
-    exit 1
-fi
+# wait for both sockets
+for sock in voacap.sock voacap_canned.sock; do
+    for i in $(seq 1 20); do
+        [ -S /run/uwsgi/$sock ] && break
+        sleep 0.2
+    done
+    if [ ! -S /run/uwsgi/$sock ]; then
+        echo "ERROR: /run/uwsgi/$sock did not appear" >&2
+        exit 1
+    fi
+done
 
 echo "voacap-service: Starting nginx..."
 exec nginx -c /app/nginx.conf -g "daemon off;"
