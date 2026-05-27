@@ -1003,88 +1003,6 @@ def _build_response(bmp_day, bmp_night, environ, start_response, compress, gener
         ])        
     return [body]
 
-
-def draw_centered_text(img, text, font_size=20):
-    from PIL import ImageDraw, ImageFont
-    
-    font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf", size=font_size)
-    draw = ImageDraw.Draw(img)
-    
-    # Measure a single character (monospace so all same width)
-    char_bbox = font.getbbox("A")
-    char_width = char_bbox[2] - char_bbox[0]
-    char_height = char_bbox[3] - char_bbox[1]
-    line_height = char_height + 4  # 4px default spacing
-    
-    lines = text.split("\n")
-    num_lines = len(lines)
-    max_chars = max(len(line) for line in lines)
-    
-    total_width = char_width * max_chars
-    total_height = line_height * num_lines
-    
-    # Top-left corner to start drawing so block is centered
-    start_x = (img.width - total_width) // 2
-    start_y = (img.height - total_height) // 2
-    
-    for i, line in enumerate(lines):
-        # Center each line individually within the block
-        line_width = char_width * len(line)
-        x = start_x + (total_width - line_width) // 2
-        y = start_y + i * line_height
-        draw.text((x, y), line, fill=(255, 255, 255), font=font)
-
-
-def _build_static_response(start_response, caption, width, height , compress, generator="OHB-voacap-area"):
-    import zlib
-    from PIL import Image
-    
-    caption = caption.replace('_', ' ').replace('\\n', '\n')
-
-    img = Image.new("RGB", (width, height), (10, 22, 40))
-    draw_centered_text(img, caption)
-
-    buf = io.BytesIO()
-    img.save(buf, format="PNG")
-    png_bytes = buf.getvalue()
-
-    bmp_data = png_to_bmp565(png_bytes, width, height)    
-        
-    if compress:
-        z_bmp   = zlib.compress(bmp_data,   level=6)
-        body    = z_bmp + z_bmp
-        start_response("200 OK", [
-            ("Content-Type",   "application/octet-stream"),
-            ("Content-Length", str(len(body))),
-            ("X-2Z-lengths",   "{} {}".format(len(z_bmp), len(z_bmp))),
-            ("Cache-Control",  "no-store"),
-            ("X-Generator",    generator),
-        ])
-    else:
-        body = bmp_data + bmp_data
-        start_response("200 OK", [
-            ("Content-Type",   "image/bmp; charset=ISO-8859-1"),
-            ("X-Generator",    generator),
-        ])            
-    return [body]
-    
-#
-# _static_caption returns string or None
-# parameter CAPTION, if present, indicates tha the tester/integrator wants a blank image generated with centered caption
-#    
-def _static_caption(params):
-    if "CAPTION" in params:
-        try:
-            v = params["CAPTION"]
-            log.info("CAPTION from query param: %s", v)   
-        except (ValueError,KeyError):
-            v = None
-    else:
-        log.info("CAPTION not present in query")
-        v = None
-    return v
-
-
 def handle_area_request(params, start_response, environ={}):
 
     def p_int(k):
@@ -1129,9 +1047,6 @@ def handle_area_request(params, start_response, environ={}):
 
     width      = int(params.get("WIDTH",  DEFAULT_WIDTH))
     height     = int(params.get("HEIGHT", DEFAULT_HEIGHT))
-    static_caption = _static_caption(params)
-    if static_caption:
-        return _build_static_response(start_response,static_caption,width,height,compress)
     mode_label = MODE_LABEL.get(mode, "MODE{}".format(mode))
     rsn        = MODE_RSN.get(mode, MODE_RSN_DEFAULT)
     ssn        = _resolve_ssn(params, year, month)
