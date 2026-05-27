@@ -45,6 +45,7 @@ from PIL import Image as _PI, ImageDraw as _PID, ImageFilter
 
 from antenna_lookup import lookup_antenna
 from cancellable_run import run_cancellable, ClientDisconnected
+from hamclock_ua import parse_ua
 
 log = logging.getLogger("voacap_service.area_map")
 
@@ -981,18 +982,25 @@ def process_map_with_night(img, darkness: float = 0.5):
 def _blank_bmp(width, height):
     return png_to_bmp565(_blank_png(width, height), width, height)
 
-def _build_response(bmp_day, bmp_night, environ, start_response, generator="OHB-voacap-area"):
+def _build_response(bmp_day, bmp_night, environ, start_response, compress, generator="OHB-voacap-area"):
     import zlib
-    z_day   = zlib.compress(bmp_day,   level=6)
-    z_night = zlib.compress(bmp_night, level=6)
-    body    = z_day + z_night
-    start_response("200 OK", [
-        ("Content-Type",   "application/octet-stream"),
-        ("Content-Length", str(len(body))),
-        ("X-2Z-lengths",   "{} {}".format(len(z_day), len(z_night))),
-        ("Cache-Control",  "no-store"),
-        ("X-Generator",    generator),
-    ])
+    if compress:
+        z_day   = zlib.compress(bmp_day,   level=6)
+        z_night = zlib.compress(bmp_night, level=6)
+        body    = z_day + z_night
+        start_response("200 OK", [
+            ("Content-Type",   "application/octet-stream"),
+            ("Content-Length", str(len(body))),
+            ("X-2Z-lengths",   "{} {}".format(len(z_day), len(z_night))),
+            ("Cache-Control",  "no-store"),
+            ("X-Generator",    generator),
+        ])
+    else:
+        body = bmp_day + bmp_night
+        start_response("200 OK", [
+            ("Content-Type",   "image/bmp; charset=ISO-8859-1"),
+            ("X-Generator",    generator),
+        ])        
     return [body]
 
 def handle_area_request(params, start_response, environ={}):
@@ -1012,6 +1020,13 @@ def handle_area_request(params, start_response, environ={}):
         start_response(code, [("Content-Type","text/plain"),("Content-Length",str(len(b)))])
         return [b]
 
+    compress = True
+    ua = parse_ua(environ)
+    if ua.is_hamclock:
+        if ua.is_version_lt(4, 13):
+            compress = False
+    log.info("INFO voacapl user_agent: %s", ua)  
+            
     REQUIRED = ("YEAR","MONTH","UTC","TXLAT","TXLNG","PATH","WATTS","MHZ","TOA","MODE")
     try:
         year  = p_int  ("YEAR")
@@ -1089,7 +1104,7 @@ def handle_area_request(params, start_response, environ={}):
     bmp_day   = png_to_bmp565(png_day,   width, height)
     bmp_night = png_to_bmp565(png_night, width, height)
     log.info("TIMING bmp565: %.2fs  TOTAL: %.2fs", _time.time() - t4, _time.time() - t0)
-    return _build_response(bmp_day, bmp_night, environ, start_response, "OHB-voacap-area")
+    return _build_response(bmp_day, bmp_night, environ, start_response, compress, "OHB-voacap-area")
 
 # Trigger coastline load at startup
 _load_coastlines()
