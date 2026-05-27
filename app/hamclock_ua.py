@@ -5,7 +5,7 @@ HamClock UA format:  HamClock-<platform>/<version>
 Examples:
     HamClock-linux/4.22
     HamClock-linux/3.10
-    HamClock-ESP/3.05
+    ESPHamClock/3.10
     Mozilla/5.0 ...          (not HamClock)
 """
 
@@ -14,9 +14,9 @@ from typing import Optional
 from dataclasses import dataclass
 
 
-# Matches: HamClock-<platform>/<major>.<minor>
+# Matches: HamClock-<platform>/<v> or ESPHamClock/<v>
 _UA_PATTERN = re.compile(
-    r'^HamClock-(?P<platform>\w+)/(?P<major>\d+)\.(?P<minor>\d+)',
+    r'^(?:HamClock-(?P<platform>\w+)|ESPHamClock)/(?P<major>\d+)\.(?P<minor>\d+)',
     re.IGNORECASE
 )
 
@@ -83,7 +83,7 @@ def parse_ua_string(ua_string: str) -> HamClockUA:
     return HamClockUA(
         is_hamclock=True,
         raw=raw,
-        platform=match.group('platform').lower(),
+        platform=match.group('platform').lower() if match.group('platform') else 'ESPHamClock',
         major=int(match.group('major')),
         minor=int(match.group('minor')),
     )
@@ -96,7 +96,7 @@ if __name__ == '__main__':
     tests = [
         "HamClock-linux/4.22",
         "HamClock-linux/3.10",
-        "HamClock-ESP/3.05",
+        "ESPHamClock/3.10",
         "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36",
         "",
     ]
@@ -126,5 +126,3 @@ if __name__ == '__main__':
     print("\n--- environ dict test (no UA key) ---")
     parsed = parse_ua({})
     print(parsed)
-            
-            

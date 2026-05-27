@@ -1023,7 +1023,7 @@ def handle_area_request(params, start_response, environ={}):
     compress = True
     ua = parse_ua(environ)
     if ua.is_hamclock:
-        if ua.is_version_lt(4, 0):
+        if ua.is_version_lt(4, 13):
             compress = False
     log.info("INFO voacapl user_agent: %s", ua)  
             
