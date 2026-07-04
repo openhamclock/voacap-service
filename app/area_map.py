@@ -438,7 +438,7 @@ def run_voaarea(deck, environ=None):
 
     `environ` is the WSGI environ dict; if supplied, voacapl is killed early
     when the upstream client disconnects (see cancellable_run). Without it,
-    behaviour is the same as a plain subprocess.run with timeout=120.
+    behaviour is the same as a plain subprocess.run with timeout=15.
     """
     run_id   = uuid.uuid4().hex[:8]
     out_sub  = "ohb_{}".format(run_id)
@@ -483,7 +483,7 @@ def run_voaarea(deck, environ=None):
         r = run_cancellable(
             [VOACAP_BIN, area_dir, "area", "calc", "default"],
             cwd=run_dir,
-            timeout=120,
+            timeout=15,
             environ=environ,
         )
         log.debug("VOAAREA rc=%d stdout=%s", r.returncode, r.stdout[:400])
