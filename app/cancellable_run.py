@@ -8,7 +8,7 @@
 #   When HamClock's client gives up on a request (its 2s fetch timeout fires),
 #   the chain lighttpd -> Perl LWP -> nginx -> uWSGI -> Python -> voacapl has
 #   no way to propagate that abandonment downward. Python's subprocess.run
-#   blocks until voacapl finishes or its own timeout fires (30s / 120s),
+#   blocks until voacapl finishes or its own timeout fires (15s),
 #   keeping the uWSGI worker pinned and burning CPU on output nobody will
 #   read. Under retry storms this saturates the worker pool within seconds.
 #
@@ -86,7 +86,7 @@ def run_cancellable(
     cmd: Sequence[str],
     *,
     cwd: Optional[str] = None,
-    timeout: float = 120.0,
+    timeout: float = 15.0,
     environ: Optional[dict] = None,
     poll_interval: float = 0.25,
     capture_output: bool = True,

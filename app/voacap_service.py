@@ -244,7 +244,7 @@ def run_voacap(deck: str, environ: dict | None = None) -> list[str]:
         result = run_cancellable(
             [VOACAP_BIN, area_dir, "voacapx.dat", "voacapx.out"],
             cwd=run_dir,
-            timeout=30,
+            timeout=15,
             environ=environ,
         )
 
