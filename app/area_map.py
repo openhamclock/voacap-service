@@ -60,8 +60,7 @@ DEFAULT_HEIGHT = 400
 
 # Random 404 load-shedding percentage (0.0 to 100.0)
 # When set > 0, randomly returns 404 for area map requests to handle retry storms.
-# Can be changed directly in script or configured via AREA_DROP_PERCENT environment variable.
-AREA_DROP_PERCENT = float(os.environ.get("AREA_DROP_PERCENT", "0.0"))
+AREA_DROP_PERCENT = 0.0
 
 # ---------------------------------------------------------------------------
 # Mode → Required SNR mapping

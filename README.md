@@ -95,7 +95,6 @@ http://your-server:8080/ham/HamClock/fetchBandConditions.pl
 | `VOACAP_AREA` | `/opt/voacapl/itshfbc` | VOACAP data area |
 | `LOG_LEVEL` | `INFO` | Logging level (DEBUG/INFO/WARNING/ERROR) |
 | `TMPDIR` | `/dev/shm` | Where per-request temp dirs are created |
-| `AREA_DROP_PERCENT` | `0.0` | Percentage (0.0–100.0) of area map requests to randomly drop with 404 for load shedding |
 
 ## Calibration notes
 
