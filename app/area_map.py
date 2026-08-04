@@ -27,6 +27,7 @@ DA1 notes (learned from bisection testing):
 import io
 import math
 import os
+import random
 import re
 import shutil
 import struct
@@ -56,6 +57,10 @@ VOACAP_BIN  = os.environ.get("VOACAP_BIN",  "voacapl")
 VOACAP_AREA = os.environ.get("VOACAP_AREA", "/root/itshfbc")
 DEFAULT_WIDTH  = 800
 DEFAULT_HEIGHT = 400
+
+# Random 404 load-shedding percentage (0.0 to 100.0)
+# When set > 0, randomly returns 404 for area map requests to handle retry storms.
+AREA_DROP_PERCENT = 0.0
 
 # ---------------------------------------------------------------------------
 # Mode → Required SNR mapping
@@ -1019,6 +1024,11 @@ def handle_area_request(params, start_response, environ={}):
         b = msg.encode()
         start_response(code, [("Content-Type","text/plain"),("Content-Length",str(len(b)))])
         return [b]
+
+    if AREA_DROP_PERCENT > 0:
+        if random.uniform(0, 100) < AREA_DROP_PERCENT:
+            log.warning("Random 404 load shedding active: dropping area map request (AREA_DROP_PERCENT=%.1f%%)", AREA_DROP_PERCENT)
+            return err("404 Not Found", "Service shedding load\n")
 
     compress = True
     ua = parse_ua(environ)
