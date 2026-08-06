@@ -54,7 +54,7 @@ main() {
         usage
     fi
 
-    while getopts ":p:cmh" opt; do
+    while getopts ":hmn" opt; do
         case $opt in
             m)
                 MULTI_PLATFORM=true
