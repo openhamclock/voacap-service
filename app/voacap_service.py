@@ -53,6 +53,7 @@ VOACAP_AREA = os.environ.get("VOACAP_AREA", "/opt/voacapl/itshfbc")
 # import area_map after basicConfig but before any use of logging
 # Area map module (VOAAREA METHOD 130 native mode)
 from area_map import handle_area_request
+from rate_limit_map import handle_rate_limit_request
 # HamClock 9 bands (MHz) — 50 MHz included; VOACAP HF model returns 0 for it
 BANDS_MHZ = [3.75, 5.36, 7.15, 10.13, 14.18, 18.12, 21.23, 24.94, 28.85]
 
@@ -339,7 +340,12 @@ def application(environ, start_response):
     path   = environ.get("PATH_INFO", "/")
     qs     = environ.get("QUERY_STRING", "")
     params = {k: v[0] for k, v in parse_qs(qs, keep_blank_values=True).items()}
-    log.info("APP - dispatching path %s",path)
+    log.info("APP - dispatching path %s", path)
+
+    if environ.get("HTTP_X_RATE_LIMITED") == "1":
+        log.warning("APP - request rate limited by nginx, serving watermark map")
+        return handle_rate_limit_request(params, start_response, environ)
+
     # VOAAREA single-frequency coverage map (CSI-compatible endpoint)
     if path in ("/fetchVOACAPArea.pl",
                 "/ham/HamClock/fetchVOACAPArea.pl",

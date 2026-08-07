@@ -29,6 +29,12 @@ if ! command -v "$VOACAP_BIN" >/dev/null 2>&1; then
 fi
 echo "voacap-service: Using VOACAP binary: $(command -v $VOACAP_BIN)"
 
+# Ensure rate limit static assets exist
+if [ ! -d /app/static/rate_limit ] || [ -z "$(ls -A /app/static/rate_limit 2>/dev/null)" ]; then
+    echo "voacap-service: Pre-generating rate limit watermark images..."
+    python3 /app/generate_watermark_images.py /app/static/rate_limit || true
+fi
+
 # Start uWSGI in background
 echo "voacap-service: Starting uWSGI..."
 uwsgi --ini /app/uwsgi.ini &
