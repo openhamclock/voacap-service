@@ -61,15 +61,17 @@ ARG GIT_VERSION
 
 COPY --from=builder /build/install/usr/local/bin/ /usr/local/bin/
 COPY --from=builder /build/install/usr/local/share/ /usr/local/share/
-COPY app/voacap_service.py  /app/voacap_service.py
-COPY app/area_map.py        /app/area_map.py
-COPY app/hamclock_ua.py     /app/hamclock_ua.py
-COPY app/antenna_data.py    /app/antenna_data.py
-COPY app/antenna_lookup.py  /app/antenna_lookup.py
-COPY app/cancellable_run.py /app/cancellable_run.py
-COPY app/uwsgi.ini          /app/uwsgi.ini
-COPY app/nginx.conf         /app/nginx.conf
-COPY app/entrypoint.sh      /app/entrypoint.sh
+COPY app/voacap_service.py           /app/voacap_service.py
+COPY app/area_map.py                 /app/area_map.py
+COPY app/hamclock_ua.py              /app/hamclock_ua.py
+COPY app/antenna_data.py             /app/antenna_data.py
+COPY app/antenna_lookup.py           /app/antenna_lookup.py
+COPY app/cancellable_run.py          /app/cancellable_run.py
+COPY app/generate_watermark_images.py /app/generate_watermark_images.py
+COPY app/rate_limit_map.py           /app/rate_limit_map.py
+COPY app/uwsgi.ini                   /app/uwsgi.ini
+COPY app/nginx.conf                  /app/nginx.conf
+COPY app/entrypoint.sh               /app/entrypoint.sh
 
 # Patch version file to use IONCAP absorption model at build time.
 # entrypoint.sh re-applies this in case the data dir is mounted externally.
@@ -83,6 +85,7 @@ RUN chmod 755 /usr/local/bin/voacapl && \
         echo "Patched: $(cat $VERSION_FILE)"; \
     fi && \
     \
+    python3 /app/generate_watermark_images.py /app/static/rate_limit && \
     chmod +x /app/entrypoint.sh && \
     rm -f /etc/nginx/sites-enabled/default /etc/nginx/conf.d/default.conf && \
     echo $GIT_VERSION > /app/git.version
