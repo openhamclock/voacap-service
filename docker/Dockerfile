@@ -92,8 +92,6 @@ RUN chmod 755 /usr/local/bin/voacapl && \
 
 ENV VOACAP_BIN=/usr/local/bin/voacapl
 ENV VOACAP_AREA=/usr/local/share/voacapl/itshfbc
-ENV VOACAP_SSN_FILE="/opt/hamclock-backend/htdocs/ham/HamClock/ssn/ssn-31.txt"
-ENV VOACAP_SSN_MODE=latest
 ENV LOG_LEVEL=INFO
 
 # Use RAM-backed tmpfs for VOACAP temp files — fastest possible I/O
