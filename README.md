@@ -124,3 +124,7 @@ sed -i 's/Version \([0-9.]*\)W/Version \1I/' \
 cd app
 uwsgi --ini uwsgi.ini --http :8080 --wsgi-disable-file-wrapper
 ```
+
+## Releases & Docker Builds
+
+For instructions on building local images, setting up SSH signing keys, and triggering releases via GitHub Actions, see [RELEASE.md](RELEASE.md).
