@@ -176,10 +176,10 @@ def build_deck(
         "SYSTEM    "
         + ("%.3f" % pow_kw).rjust(5)
         + ("%.0f"  % 145   ).rjust(5)
-        + ("%.2f"  % 3.00  ).rjust(5)
+        + ("%.2f"  % toa   ).rjust(5)
         + ("%.0f"  % 90    ).rjust(5)
         + ("%.2f"  % rsn   ).rjust(5)
-        + ("%.2f"  % toa   ).rjust(5)
+        + ("%.2f"  % 3.00  ).rjust(5)
         + ("%.2f"  % 0.00  ).rjust(5)
     )
 
