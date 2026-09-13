@@ -12,10 +12,10 @@ services:
     environment:
       LOG_LEVEL: INFO
     ports:
-      - 8080:8080"
+      - "8080:8080"
     shm_size: "64mb"    # /dev/shm for fast VOACAP temp files
     mem_limit: "512m"
-    cpus: "2.0"
+    cpus: "4.0"
     tmpfs:
       - /run:size=8m
       - /tmp:size=32m
