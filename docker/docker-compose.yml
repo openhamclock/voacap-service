@@ -11,6 +11,7 @@ services:
     restart: unless-stopped
     environment:
       LOG_LEVEL: INFO
+      VOACAP_MAX_CONCURRENT: "4"
     ports:
       - "8080:8080"
     shm_size: "64mb"    # /dev/shm for fast VOACAP temp files
