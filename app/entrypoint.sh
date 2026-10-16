@@ -51,5 +51,10 @@ if [ ! -S /run/uwsgi/voacap.sock ]; then
     exit 1
 fi
 
+# Configure maximum concurrent VOACAP calculations in nginx (default: 4)
+VOACAP_MAX_CONCURRENT="${VOACAP_MAX_CONCURRENT:-4}"
+echo "voacap-service: Setting max concurrent VOACAP calculations to ${VOACAP_MAX_CONCURRENT}..."
+sed -i -E "s/limit_conn global_conns [0-9]+;/limit_conn global_conns ${VOACAP_MAX_CONCURRENT};/" /app/nginx.conf
+
 echo "voacap-service: Starting nginx..."
 exec nginx -c /app/nginx.conf -g "daemon off;"
