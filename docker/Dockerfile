@@ -17,7 +17,7 @@
 # Test:
 #   curl "http://localhost:8080/fetchBandConditions?YEAR=2026&MONTH=1&RXLAT=0&RXLNG=0&TXLAT=28&TXLNG=-81&PATH=0&POW=100&MODE=19&TOA=3.0"
 
-FROM debian:13.4-slim AS builder
+FROM debian:13-slim AS builder
 
 WORKDIR /build/voacapl
 
