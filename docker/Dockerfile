@@ -42,7 +42,7 @@ RUN git clone --depth=1 https://github.com/jawatson/voacapl.git /build/voacapl &
     make install DESTDIR=/build/install
 
 # ---------------------------------------------------------------------------
-FROM debian:13.4-slim
+FROM debian:13-slim
 
 WORKDIR /app
 
